@@ -1,0 +1,6 @@
+@ControlDeDinero.Api_HostAddress = http://localhost:5201
+
+GET {{ControlDeDinero.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

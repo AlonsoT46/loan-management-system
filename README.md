@@ -1,4 +1,4 @@
-[README_Control_de_Dinero.md](https://github.com/user-attachments/files/33746027/README_Control_de_Dinero.md)
+﻿[README_Control_de_Dinero.md](https://github.com/user-attachments/files/33746027/README_Control_de_Dinero.md)
 # Control de Dinero
 
 **A personal loan ledger built for a real-world use case.**
@@ -25,7 +25,7 @@ Keeping loan records in a notebook makes it difficult to find older transactions
 
 The initial interest rate is **15% per loan**, editable when a loan is created. It is a **one-time fixed rate**, not a recurring monthly charge. Early repayment does **not** reduce the agreed interest.
 
-Example: principal **₡50,000** + fixed interest **₡7,500** = **₡57,500** to repay.
+Example: principal **Ôéí50,000** + fixed interest **Ôéí7,500** = **Ôéí57,500** to repay.
 
 Partial payments are allocated proportionally between principal and interest, using decimal arithmetic and a final-payment rounding adjustment. Therefore, money received and interest earnings are not treated as the same figure.
 
@@ -70,18 +70,18 @@ PostgreSQL
 
 ```text
 loan-management-system/
-├── backend/
-│   ├── ControlDeDinero.Api/
-│   ├── ControlDeDinero.Application/
-│   ├── ControlDeDinero.Domain/
-│   ├── ControlDeDinero.Infrastructure/
-│   └── ControlDeDinero.Tests/
-├── frontend/
-├── docs/
-│   ├── requirements/
-│   ├── diagrams/
-│   └── screenshots/
-└── README.md
+Ôö£ÔöÇÔöÇ backend/
+Ôöé   Ôö£ÔöÇÔöÇ ControlDeDinero.Api/
+Ôöé   Ôö£ÔöÇÔöÇ ControlDeDinero.Application/
+Ôöé   Ôö£ÔöÇÔöÇ ControlDeDinero.Domain/
+Ôöé   Ôö£ÔöÇÔöÇ ControlDeDinero.Infrastructure/
+Ôöé   ÔööÔöÇÔöÇ ControlDeDinero.Tests/
+Ôö£ÔöÇÔöÇ frontend/
+Ôö£ÔöÇÔöÇ docs/
+Ôöé   Ôö£ÔöÇÔöÇ requirements/
+Ôöé   Ôö£ÔöÇÔöÇ diagrams/
+Ôöé   ÔööÔöÇÔöÇ screenshots/
+ÔööÔöÇÔöÇ README.md
 ```
 
 The structure above is the **target organization** and will be built out incrementally.
@@ -119,6 +119,15 @@ This repository must contain **fictional clients and financial records only**. N
 ## About the project
 
 This is both a practical tool for a family member and a portfolio project focused on full-stack engineering, relational data modeling, financial correctness, and thoughtful UX. The user-facing interface will be in Spanish; source code and database identifiers will be in English.
+
+
+## Documentation
+
+Detailed technical documentation is available in Spanish:
+
+- [Installation Guide (ES)](docs/instalacion-desde-github.md)
+- [Entity Framework Core Setup (ES)](docs/configuracion-entity-framework.md)
+
 
 ## License
 
