@@ -39,7 +39,7 @@ Partial payments are allocated proportionally between principal and interest, us
 | Backend | ASP.NET Core Web API (.NET 10, C#) | Clients, loans and payments endpoints |
 | Data access | Entity Framework Core 10 (Code First) | Implemented |
 | Database | MySQL 8.4 (`MySql.EntityFrameworkCore`) | Implemented |
-| Testing | xUnit | Domain tests implemented; integration tests planned |
+| Testing | xUnit | Domain and service tests implemented; integration tests planned |
 | Frontend | React, TypeScript, Tailwind CSS | Planned |
 | Delivery | HTTPS web deployment and mobile PWA | Planned |
 | Version control | Git and GitHub | In use |
@@ -68,7 +68,7 @@ MySQL
 Backend layers (dependencies point inwards):
 
 - `Domain`: entities and business rules. Depends on nothing.
-- `Application`: use cases (currently empty). Depends on `Domain`.
+- `Application`: use cases (`ClientService`, `LoanService`), DTOs, request models and repository interfaces. Depends on `Domain`.
 - `Infrastructure`: EF Core, `AppDbContext`, migrations. Depends on `Domain` and `Application`.
 - `Api`: HTTP entry point and dependency injection. Depends on `Application` and `Infrastructure`.
 
@@ -149,7 +149,7 @@ dotnet test
 
 ## Documentation
 
-The functional and technical specification (Spanish) covers requirements, business rules, flows, the entity-relationship model, API design, and acceptance scenarios. Add the approved Word document to `docs/requirements/` when publishing the repository.
+The functional and technical specification (Spanish) covers requirements, business rules, flows, the entity-relationship model, API design, and acceptance scenarios.
 
 Detailed technical documentation is available in Spanish:
 
