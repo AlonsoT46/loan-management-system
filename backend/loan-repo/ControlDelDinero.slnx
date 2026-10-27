@@ -1,7 +1,0 @@
-<Solution>
-  <Project Path="ControlDeDinero.Api/ControlDeDinero.Api.csproj" />
-  <Project Path="ControlDelDinero.Application/ControlDelDinero.Application.csproj" Id="bdd49d10-201b-48e1-8430-4161c9490ef6" />
-  <Project Path="ControlDelDinero.Domain/ControlDelDinero.Domain.csproj" Id="9361f021-55a9-4564-b3f3-3a99f19d7533" />
-  <Project Path="ControlDelDinero.Infrastructure/ControlDelDinero.Infrastructure.csproj" Id="67e7380d-b557-4a94-82bb-57a51f7bcf28" />
-  <Project Path="ControlDelDinero.Test/ControlDelDinero.Test.csproj" Id="7d21fc72-137b-4ad4-80e3-97bc1fcfe5f8" />
-</Solution>
