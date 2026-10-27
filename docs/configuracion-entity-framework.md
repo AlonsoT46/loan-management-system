@@ -29,7 +29,7 @@ Las entidades viven en `Domain`. La implementación de Entity Framework Core se 
 
 ## 2. Localizar los proyectos
 
-Desde la raíz de la solución:
+Desde la carpeta `backend` (donde está `ControlDeDinero.slnx`):
 
 ```powershell
 $api = (Get-ChildItem -Recurse -Filter "*Api.csproj" |
@@ -179,7 +179,7 @@ public class AppDbContext : DbContext
 }
 ```
 
-Este código es un ejemplo de la configuración principal, no un reemplazo automático del `AppDbContext` actual. Las propiedades y espacios de nombres deben coincidir con las entidades reales.
+Este código es un ejemplo mínimo de las primeras entidades. El `AppDbContext` actual (`backend/ControlDeDinero.Infrastructure/Persistence/AppDbContext.cs`) ya configura todas las entidades, precisión decimal por convención, fechas UTC y eliminación restringida; consúltelo como referencia. Las propiedades y espacios de nombres deben coincidir con las entidades reales.
 
 El diseño definitivo debería configurar las relaciones explícitamente y, de ser necesario, extraerlas a clases `IEntityTypeConfiguration<T>`.
 

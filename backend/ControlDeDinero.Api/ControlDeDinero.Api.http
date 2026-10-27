@@ -1,0 +1,33 @@
+@ControlDeDinero.Api_HostAddress = http://localhost:5201
+
+### Create a client (use fictional data only)
+POST {{ControlDeDinero.Api_HostAddress}}/api/clients
+Content-Type: application/json
+
+{
+  "name": "Ana Prueba",
+  "phone": "8888-0000",
+  "notes": "Cliente de prueba"
+}
+
+### List / search clients (add &includeInactive=true to see deactivated ones)
+GET {{ControlDeDinero.Api_HostAddress}}/api/clients?search=ana
+
+### Get one client: replace the id with one returned above
+GET {{ControlDeDinero.Api_HostAddress}}/api/clients/00000000-0000-0000-0000-000000000000
+
+### Update a client
+PUT {{ControlDeDinero.Api_HostAddress}}/api/clients/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+{
+  "name": "Ana Prueba",
+  "phone": "8888-1111",
+  "notes": "Cambió de número"
+}
+
+### Deactivate
+POST {{ControlDeDinero.Api_HostAddress}}/api/clients/00000000-0000-0000-0000-000000000000/deactivate
+
+### Activate
+POST {{ControlDeDinero.Api_HostAddress}}/api/clients/00000000-0000-0000-0000-000000000000/activate

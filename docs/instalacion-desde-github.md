@@ -22,7 +22,7 @@ Comprobar que .NET y Git estén disponibles:
 dotnet --version
 git --version
 ```
-De no ser el caso de tener donet, utilice:
+De no tener la herramienta `dotnet-ef`, instálela con:
 
 dotnet tool install --global dotnet-ef --version 10.0.9
 
@@ -33,13 +33,13 @@ Abrir PowerShell y ejecutar:
 
 ```powershell
 git clone https://github.com/AlonsoT46/loan-management-system
-cd CARPETA_DEL_REPOSITORIO
+cd loan-management-system\backend
 ```
-Fijese bien que los nombres coincidan
+La solución (`ControlDeDinero.slnx`) está dentro de la carpeta `backend`, por eso los siguientes comandos se ejecutan desde ahí.
 
 ## 3. Restaurar los paquetes NuGet
 
-Desde la raíz de la solución:
+Desde `backend`:
 
 ```powershell
 dotnet restore
@@ -78,7 +78,7 @@ Utilizar una contraseña segura y privada. De ser el caso que el usuario ya exis
 
 ## 5. Configurar la conexión
 
-Desde la raíz de la solución, localizar el proyecto API:
+Desde `backend`, localizar el proyecto API:
 
 ```powershell
 $api = (Get-ChildItem -Recurse -Filter "*Api.csproj" |
@@ -161,10 +161,10 @@ El esquema inicial debe incluir:
 
 - `clients`
 - `loans`
-- `AuditEvent`
-- `Installment`
-- `Payment`
-- `PaymentAllocation`
+- `installments`
+- `payments`
+- `payment_allocations`
+- `audit_events`
 - `__EFMigrationsHistory`
 
 Los nombres exactos corresponden a la migración inicial; podrán cambiar mediante futuras migraciones.
@@ -201,7 +201,7 @@ En caso de no encontrar User Secrets, ejecute: Wins + R, seguidamente, ejecute: 
 
 ### El proyecto API o Infrastructure no se encuentra
 
-Comprobar que se están ejecutando los comandos desde la raíz del repositorio y que los archivos `.csproj` existen.
+Comprobar que se están ejecutando los comandos desde la carpeta `backend` y que los archivos `.csproj` existen.
 
 ### Las tablas ya existen
 
