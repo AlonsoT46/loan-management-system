@@ -67,6 +67,8 @@ internal sealed class FakeLoanRepository : ILoanRepository
         Guid? clientId,
         LoanStatus? status,
         DateTime? overdueAsOf,
+        DateTime? loanDateFrom,
+        DateTime? loanDateTo,
         CancellationToken cancellationToken = default)
     {
         IEnumerable<Loan> query = Loans;
@@ -83,15 +85,71 @@ internal sealed class FakeLoanRepository : ILoanRepository
             query = query.Where(l => l.Status == LoanStatus.Active && l.RemainingBalance > 0m && l.DueDate < today);
         }
 
+        if (loanDateFrom.HasValue)
+            query = query.Where(l => l.LoanDate >= loanDateFrom.Value);
+
+        if (loanDateTo.HasValue)
+            query = query.Where(l => l.LoanDate < loanDateTo.Value);
+
         IReadOnlyList<Loan> result = query.OrderBy(l => l.DueDate).ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<Loan>> ListAllWithPaymentsAsync(CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Loan> result = Loans.ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<Payment>> SearchPaymentsAsync(
+        Guid? clientId,
+        DateTime? from,
+        DateTime? to,
+        bool includeVoided,
+        CancellationToken cancellationToken = default)
+    {
+        var payments = new List<Payment>();
+
+        foreach (var loan in Loans)
+        {
+            if (clientId.HasValue && loan.ClientId != clientId.Value)
+                continue;
+
+            foreach (var payment in loan.Payments)
+            {
+                // EF fills Payment.Loan when it loads; the fake does the same.
+                SetProperty(payment, nameof(Payment.Loan), loan);
+                payments.Add(payment);
+            }
+        }
+
+        IEnumerable<Payment> query = payments;
+
+        if (!includeVoided)
+            query = query.Where(p => !p.IsVoided);
+
+        if (from.HasValue)
+            query = query.Where(p => p.PaymentDate >= from.Value);
+
+        if (to.HasValue)
+            query = query.Where(p => p.PaymentDate < to.Value);
+
+        IReadOnlyList<Payment> result = query.OrderByDescending(p => p.PaymentDate).ToList();
         return Task.FromResult(result);
     }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        // EF generates the keys of new payments when saving; the fake does the same.
+        foreach (var payment in Loans.SelectMany(l => l.Payments).Where(p => p.Id == Guid.Empty))
+            SetProperty(payment, nameof(Payment.Id), Guid.NewGuid());
+
         SaveCount++;
         return Task.CompletedTask;
     }
+
+    private static void SetProperty(object target, string name, object? value) =>
+        target.GetType().GetProperty(name)!.SetValue(target, value);
 }
 
 /// <summary>A clock frozen at a given UTC instant, whose local time zone is UTC-6 (Costa Rica).</summary>

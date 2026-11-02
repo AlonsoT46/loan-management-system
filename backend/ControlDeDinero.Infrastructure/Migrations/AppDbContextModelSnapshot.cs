@@ -186,6 +186,9 @@ namespace ControlDeDinero.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<bool>("IsVoided")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<Guid>("LoanId")
                         .HasColumnType("char(36)");
 
@@ -194,6 +197,13 @@ namespace ControlDeDinero.Infrastructure.Migrations
                         .HasColumnType("varchar(500)");
 
                     b.Property<DateTime>("PaymentDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("VoidReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("VoidedAtUtc")
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");

@@ -1,4 +1,3 @@
-using ControlDeDinero.Application;
 using ControlDeDinero.Application.Clients;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,15 +17,8 @@ public class ClientsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CreateClientResult>> Create(CreateClientRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var result = await _service.CreateAsync(request, cancellationToken);
-            return CreatedAtAction(nameof(GetById), new { id = result.Client.Id }, result);
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+        var result = await _service.CreateAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = result.Client.Id }, result);
     }
 
     [HttpGet]
@@ -52,18 +44,11 @@ public class ClientsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ClientDto>> Update(Guid id, UpdateClientRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var client = await _service.UpdateAsync(id, request, cancellationToken);
-            if (client is null)
-                return NotFound();
+        var client = await _service.UpdateAsync(id, request, cancellationToken);
+        if (client is null)
+            return NotFound();
 
-            return Ok(client);
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+        return Ok(client);
     }
 
     [HttpPost("{id:guid}/deactivate")]

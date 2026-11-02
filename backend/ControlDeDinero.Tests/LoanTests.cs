@@ -176,4 +176,101 @@ public class LoanTests
         Assert.Throws<ArgumentException>(() =>
             loan.RegisterPayment(1_000m, Today.AddDays(-1)));
     }
+
+    [Fact]
+    public void VoidPayment_RestoresBalanceAndReopensAPaidLoan()
+    {
+        var loan = NewLoan(1_000m, 10m); // total 1,100
+        var payment = loan.RegisterPayment(1_100m, Today.AddDays(1));
+        Assert.Equal(LoanStatus.Paid, loan.Status);
+
+        loan.VoidPayment(payment.Id, DateTime.UtcNow, "wrong amount");
+
+        Assert.True(payment.IsVoided);
+        Assert.Equal("wrong amount", payment.VoidReason);
+        Assert.NotNull(payment.VoidedAtUtc);
+        Assert.Equal(0m, loan.TotalPaid);
+        Assert.Equal(1_100m, loan.RemainingBalance);
+        Assert.Equal(LoanStatus.Active, loan.Status);
+        Assert.Contains(loan.AuditEvents, e => e.EventType == "PaymentVoided");
+        Assert.Single(loan.Payments); // never deleted
+    }
+
+    [Fact]
+    public void VoidPayment_RejectsVoidingTwice()
+    {
+        var loan = NewLoan(1_000m, 10m);
+        var payment = loan.RegisterPayment(500m, Today.AddDays(1));
+        loan.VoidPayment(payment.Id, DateTime.UtcNow);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            loan.VoidPayment(payment.Id, DateTime.UtcNow));
+    }
+
+    [Fact]
+    public void VoidPayment_RejectsUnknownPayment()
+    {
+        var loan = NewLoan(1_000m, 10m);
+        loan.RegisterPayment(500m, Today.AddDays(1));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            loan.VoidPayment(Guid.NewGuid(), DateTime.UtcNow));
+    }
+
+    [Fact]
+    public void RegisterPayment_IgnoresVoidedPaymentsWhenSplitting()
+    {
+        var loan = NewLoan(100m, 10m); // interest 10.00, total 110.00
+        var first = loan.RegisterPayment(55m, Today.AddDays(1));
+        loan.VoidPayment(first.Id, DateTime.UtcNow);
+
+        loan.RegisterPayment(110m, Today.AddDays(2));
+
+        var counted = loan.Payments.Where(p => !p.IsVoided).SelectMany(p => p.Allocations).ToList();
+        Assert.Equal(100m, counted.Sum(a => a.PrincipalPaid));
+        Assert.Equal(10m, counted.Sum(a => a.InterestPaid));
+        Assert.Equal(LoanStatus.Paid, loan.Status);
+    }
+
+    [Fact]
+    public void Cancel_MarksTheLoanCancelledAndKeepsAnAuditTrail()
+    {
+        var loan = NewLoan();
+
+        loan.Cancel("registered by mistake");
+
+        Assert.Equal(LoanStatus.Cancelled, loan.Status);
+        Assert.Contains(loan.AuditEvents, e => e.EventType == "LoanCancelled");
+    }
+
+    [Fact]
+    public void Cancel_RejectsALoanWithActivePayments()
+    {
+        var loan = NewLoan();
+        loan.RegisterPayment(1_000m, Today.AddDays(1));
+
+        Assert.Throws<InvalidOperationException>(() => loan.Cancel());
+    }
+
+    [Fact]
+    public void Cancel_AllowsALoanWhoseOnlyPaymentsWereVoided()
+    {
+        var loan = NewLoan();
+        var payment = loan.RegisterPayment(1_000m, Today.AddDays(1));
+        loan.VoidPayment(payment.Id, DateTime.UtcNow);
+
+        loan.Cancel();
+
+        Assert.Equal(LoanStatus.Cancelled, loan.Status);
+    }
+
+    [Fact]
+    public void Cancel_RejectsCancellingTwice_AndBlocksMorePayments()
+    {
+        var loan = NewLoan();
+        loan.Cancel();
+
+        Assert.Throws<InvalidOperationException>(() => loan.Cancel());
+        Assert.Throws<InvalidOperationException>(() => loan.RegisterPayment(1_000m, Today.AddDays(1)));
+    }
 }

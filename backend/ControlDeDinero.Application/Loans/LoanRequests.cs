@@ -13,3 +13,7 @@ public record CreateLoanRequest(
 
 /// <param name="PaymentDate">Defaults to today (Costa Rica) when omitted.</param>
 public record RegisterPaymentRequest(decimal Amount, DateTime? PaymentDate, string? Notes);
+
+public record VoidPaymentRequest(string? Reason);
+
+public record CancelLoanRequest(string? Reason);

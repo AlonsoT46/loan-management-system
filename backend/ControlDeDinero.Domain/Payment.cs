@@ -20,8 +20,20 @@ public class Payment
     public decimal Amount { get; private set; }
     public string? Notes { get; private set; }
 
+    // A voided payment is never deleted: it stays in the history, flagged, and stops counting.
+    public bool IsVoided { get; private set; }
+    public DateTime? VoidedAtUtc { get; private set; }
+    public string? VoidReason { get; private set; }
+
     public Loan? Loan { get; private set; }
     public ICollection<PaymentAllocation> Allocations { get; private set; } = new List<PaymentAllocation>();
+
+    internal void Void(DateTime voidedAtUtc, string? reason)
+    {
+        IsVoided = true;
+        VoidedAtUtc = voidedAtUtc;
+        VoidReason = reason;
+    }
 
     internal void Allocate(decimal principalPaid, decimal interestPaid)
     {

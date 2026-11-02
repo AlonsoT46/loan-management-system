@@ -1,4 +1,3 @@
-using ControlDeDinero.Application;
 using ControlDeDinero.Application.Loans;
 using ControlDeDinero.Domain;
 using Microsoft.AspNetCore.Mvc;
@@ -19,26 +18,23 @@ public class LoansController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<LoanDetailDto>> Create(CreateLoanRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var loan = await _service.CreateAsync(request, cancellationToken);
-            return CreatedAtAction(nameof(GetById), new { id = loan.Loan.Id }, loan);
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+        var loan = await _service.CreateAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = loan.Loan.Id }, loan);
     }
 
-    /// <summary>Lists loans. Example: /api/loans?onlyOverdue=true shows who is late.</summary>
+    /// <summary>
+    /// Lists loans. Examples: /api/loans?onlyOverdue=true shows who is late;
+    /// /api/loans?month=2026-11 shows the loans made in November 2026.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<LoanSummaryDto>>> Search(
         [FromQuery] Guid? clientId,
         [FromQuery] LoanStatus? status,
         [FromQuery] bool onlyOverdue,
+        [FromQuery] string? month,
         CancellationToken cancellationToken)
     {
-        var loans = await _service.SearchAsync(clientId, status, onlyOverdue, cancellationToken);
+        var loans = await _service.SearchAsync(clientId, status, onlyOverdue, month, cancellationToken);
         return Ok(loans);
     }
 
@@ -58,17 +54,39 @@ public class LoansController : ControllerBase
         RegisterPaymentRequest request,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var loan = await _service.RegisterPaymentAsync(id, request, cancellationToken);
-            if (loan is null)
-                return NotFound();
+        var loan = await _service.RegisterPaymentAsync(id, request, cancellationToken);
+        if (loan is null)
+            return NotFound();
 
-            return Ok(loan);
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+        return Ok(loan);
+    }
+
+    /// <summary>Voids a payment made by mistake. It is not deleted: it stays flagged in the history.</summary>
+    [HttpPost("{id:guid}/payments/{paymentId:guid}/void")]
+    public async Task<ActionResult<LoanDetailDto>> VoidPayment(
+        Guid id,
+        Guid paymentId,
+        [FromBody] VoidPaymentRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var loan = await _service.VoidPaymentAsync(id, paymentId, request, cancellationToken);
+        if (loan is null)
+            return NotFound();
+
+        return Ok(loan);
+    }
+
+    /// <summary>Cancels a loan that has no active payments (for example, one registered by mistake).</summary>
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<ActionResult<LoanDetailDto>> Cancel(
+        Guid id,
+        [FromBody] CancelLoanRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var loan = await _service.CancelAsync(id, request, cancellationToken);
+        if (loan is null)
+            return NotFound();
+
+        return Ok(loan);
     }
 }

@@ -29,7 +29,7 @@ public class LoanService
         if (request.DueDate is null)
             throw new ValidationException("Due date is required.");
 
-        var notes = CleanNotes(request.Notes);
+        var notes = CleanText(request.Notes, "Notes");
         var today = Today();
         var loanDate = (request.LoanDate ?? today).Date;
 
@@ -64,17 +64,51 @@ public class LoanService
         return ToDetail(loan, loan.Client?.Name ?? string.Empty, Today());
     }
 
+    /// <param name="month">Optional "yyyy-MM": only loans made in that month.</param>
     public async Task<IReadOnlyList<LoanSummaryDto>> SearchAsync(
         Guid? clientId,
         LoanStatus? status,
         bool onlyOverdue,
+        string? month = null,
         CancellationToken cancellationToken = default)
     {
+        var (from, to) = MonthRange.Parse(month);
         var today = Today();
-        var loans = await _loans.SearchAsync(clientId, status, onlyOverdue ? today : null, cancellationToken);
+
+        var loans = await _loans.SearchAsync(
+            clientId,
+            status,
+            onlyOverdue ? today : null,
+            from,
+            to,
+            cancellationToken);
 
         return loans
             .Select(l => ToSummary(l, l.Client?.Name ?? string.Empty, today))
+            .ToList();
+    }
+
+    /// <param name="month">Optional "yyyy-MM": only payments made in that month.</param>
+    public async Task<IReadOnlyList<PaymentListItemDto>> SearchPaymentsAsync(
+        Guid? clientId,
+        string? month,
+        bool includeVoided,
+        CancellationToken cancellationToken = default)
+    {
+        var (from, to) = MonthRange.Parse(month);
+        var payments = await _loans.SearchPaymentsAsync(clientId, from, to, includeVoided, cancellationToken);
+
+        return payments
+            .Select(p => new PaymentListItemDto(
+                p.Id,
+                p.LoanId,
+                p.Loan?.ClientId ?? Guid.Empty,
+                p.Loan?.Client?.Name ?? string.Empty,
+                p.PaymentDate,
+                p.Amount,
+                p.Allocations.Sum(a => a.PrincipalPaid),
+                p.Allocations.Sum(a => a.InterestPaid),
+                p.IsVoided))
             .ToList();
     }
 
@@ -89,10 +123,11 @@ public class LoanService
 
         var today = Today();
         var paymentDate = (request.PaymentDate ?? today).Date;
+        var notes = CleanText(request.Notes, "Notes");
 
         try
         {
-            loan.RegisterPayment(request.Amount, paymentDate, CleanNotes(request.Notes));
+            loan.RegisterPayment(request.Amount, paymentDate, notes);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -104,14 +139,68 @@ public class LoanService
         return ToDetail(loan, loan.Client?.Name ?? string.Empty, today);
     }
 
+    /// <summary>Voids a payment (it stays in the history, flagged). Returns null if the loan or payment does not exist.</summary>
+    public async Task<LoanDetailDto?> VoidPaymentAsync(
+        Guid loanId,
+        Guid paymentId,
+        VoidPaymentRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        var loan = await _loans.GetByIdWithPaymentsAsync(loanId, cancellationToken);
+        if (loan is null || loan.Payments.All(p => p.Id != paymentId))
+            return null;
+
+        var reason = CleanText(request?.Reason, "Reason");
+        var voidedAtUtc = _time.GetUtcNow().UtcDateTime;
+
+        try
+        {
+            loan.VoidPayment(paymentId, voidedAtUtc, reason);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ValidationException(ex.Message);
+        }
+
+        await _loans.SaveChangesAsync(cancellationToken);
+
+        return ToDetail(loan, loan.Client?.Name ?? string.Empty, Today());
+    }
+
+    /// <summary>Cancels a loan that has no active payments. Returns null if the loan does not exist.</summary>
+    public async Task<LoanDetailDto?> CancelAsync(
+        Guid loanId,
+        CancelLoanRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        var loan = await _loans.GetByIdWithPaymentsAsync(loanId, cancellationToken);
+        if (loan is null)
+            return null;
+
+        var reason = CleanText(request?.Reason, "Reason");
+
+        try
+        {
+            loan.Cancel(reason);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ValidationException(ex.Message);
+        }
+
+        await _loans.SaveChangesAsync(cancellationToken);
+
+        return ToDetail(loan, loan.Client?.Name ?? string.Empty, Today());
+    }
+
     /// <summary>Today's date in the configured time zone (Costa Rica in production).</summary>
     private DateTime Today() => _time.GetLocalNow().Date;
 
-    private static string? CleanNotes(string? notes)
+    private static string? CleanText(string? value, string fieldName)
     {
-        var clean = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        var clean = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         if (clean is not null && clean.Length > MaxNotesLength)
-            throw new ValidationException($"Notes cannot be longer than {MaxNotesLength} characters.");
+            throw new ValidationException($"{fieldName} cannot be longer than {MaxNotesLength} characters.");
 
         return clean;
     }
@@ -144,7 +233,10 @@ public class LoanService
                 p.Amount,
                 p.Notes,
                 p.Allocations.Sum(a => a.PrincipalPaid),
-                p.Allocations.Sum(a => a.InterestPaid)))
+                p.Allocations.Sum(a => a.InterestPaid),
+                p.IsVoided,
+                p.VoidedAtUtc,
+                p.VoidReason))
             .ToList();
 
         return new LoanDetailDto(ToSummary(loan, clientName, today), payments);

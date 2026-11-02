@@ -105,7 +105,7 @@ public class Loan
         if (amount > RemainingBalance)
             throw new InvalidOperationException("Payment exceeds the remaining balance.");
 
-        var allocations = Payments.SelectMany(p => p.Allocations).ToList();
+        var allocations = Payments.Where(p => !p.IsVoided).SelectMany(p => p.Allocations).ToList();
         var remainingPrincipal = PrincipalAmount - allocations.Sum(a => a.PrincipalPaid);
         var remainingInterest = InterestAmount - allocations.Sum(a => a.InterestPaid);
 
@@ -156,6 +156,57 @@ public class Loan
     {
         var days = (dueDate.Date - loanDate.Date).Days;
         return Math.Max(1, (days + DaysPerQuincena - 1) / DaysPerQuincena);
+    }
+
+    /// <summary>
+    /// Voids a payment without deleting it: the payment stays in the history, flagged, and the
+    /// balance is recalculated from the payments that still count. A paid loan becomes active again.
+    /// </summary>
+    public Payment VoidPayment(Guid paymentId, DateTime voidedAtUtc, string? reason = null)
+    {
+        if (Status == LoanStatus.Cancelled)
+            throw new InvalidOperationException("A cancelled loan cannot be changed.");
+
+        var payment = Payments.FirstOrDefault(p => p.Id == paymentId)
+            ?? throw new InvalidOperationException("Payment not found in this loan.");
+
+        if (payment.IsVoided)
+            throw new InvalidOperationException("The payment is already voided.");
+
+        payment.Void(voidedAtUtc, reason);
+
+        TotalPaid = Payments.Where(p => !p.IsVoided).Sum(p => p.Amount);
+        RemainingBalance = TotalAmount - TotalPaid;
+        Status = RemainingBalance == 0m ? LoanStatus.Paid : LoanStatus.Active;
+
+        AuditEvents.Add(new AuditEvent(
+            Id,
+            "PaymentVoided",
+            "Payment " + Format(payment.Amount) + " from "
+            + payment.PaymentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + " voided"
+            + (reason is null ? "." : ": " + reason)));
+
+        return payment;
+    }
+
+    /// <summary>
+    /// Cancels the loan (for example, it was registered by mistake). It is kept in the history.
+    /// A loan with payments cannot be cancelled until those payments are voided.
+    /// </summary>
+    public void Cancel(string? reason = null)
+    {
+        if (Status == LoanStatus.Cancelled)
+            throw new InvalidOperationException("The loan is already cancelled.");
+
+        if (Payments.Any(p => !p.IsVoided))
+            throw new InvalidOperationException("Void the recorded payments first: a loan with payments cannot be cancelled.");
+
+        Status = LoanStatus.Cancelled;
+
+        AuditEvents.Add(new AuditEvent(
+            Id,
+            "LoanCancelled",
+            reason is null ? "Loan cancelled." : "Loan cancelled: " + reason));
     }
 
     /// <summary>

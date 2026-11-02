@@ -6,7 +6,22 @@ public record PaymentDto(
     decimal Amount,
     string? Notes,
     decimal PrincipalPaid,
-    decimal InterestPaid);
+    decimal InterestPaid,
+    bool IsVoided,
+    DateTime? VoidedAtUtc,
+    string? VoidReason);
+
+/// <summary>A payment in a cross-loan list (history by month or by client).</summary>
+public record PaymentListItemDto(
+    Guid PaymentId,
+    Guid LoanId,
+    Guid ClientId,
+    string ClientName,
+    DateTime PaymentDate,
+    decimal Amount,
+    decimal PrincipalPaid,
+    decimal InterestPaid,
+    bool IsVoided);
 
 /// <summary>A loan without its payments, used for lists.</summary>
 public record LoanSummaryDto(
@@ -26,5 +41,5 @@ public record LoanSummaryDto(
     bool IsOverdue,
     string? Notes);
 
-/// <summary>A loan with its payments, ordered by date.</summary>
+/// <summary>A loan with its payments, ordered by date (voided ones included and flagged).</summary>
 public record LoanDetailDto(LoanSummaryDto Loan, IReadOnlyList<PaymentDto> Payments);

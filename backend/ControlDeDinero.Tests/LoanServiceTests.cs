@@ -205,4 +205,108 @@ public class LoanServiceTests
         Assert.Equal(luis.Id, Assert.Single(byClient).ClientId);
         Assert.Equal(anaLoan.Loan.Id, Assert.Single(paid).Id);
     }
+
+    [Fact]
+    public async Task Cancel_CancelsALoanWithoutPayments()
+    {
+        var client = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(client.Id));
+
+        var result = await service.CancelAsync(created.Loan.Id, new CancelLoanRequest("registered by mistake"));
+
+        Assert.Equal("Cancelled", result!.Loan.Status);
+    }
+
+    [Fact]
+    public async Task Cancel_RejectsALoanWithActivePayments()
+    {
+        var client = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(client.Id));
+        await service.RegisterPaymentAsync(created.Loan.Id, new RegisterPaymentRequest(1_000m, null, null));
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            service.CancelAsync(created.Loan.Id, null));
+    }
+
+    [Fact]
+    public async Task Cancel_ReturnsNullWhenLoanDoesNotExist()
+    {
+        Assert.Null(await NewService().CancelAsync(Guid.NewGuid(), null));
+    }
+
+    [Fact]
+    public async Task VoidPayment_RecalculatesTheLoanAndKeepsThePaymentFlagged()
+    {
+        var client = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(client.Id)); // total 60,000
+        var paid = await service.RegisterPaymentAsync(created.Loan.Id, new RegisterPaymentRequest(60_000m, null, null));
+        Assert.Equal("Paid", paid!.Loan.Status);
+
+        var result = await service.VoidPaymentAsync(
+            created.Loan.Id,
+            paid.Payments[0].Id,
+            new VoidPaymentRequest("wrong amount"));
+
+        Assert.Equal("Active", result!.Loan.Status);
+        Assert.Equal(60_000m, result.Loan.RemainingBalance);
+        var payment = Assert.Single(result.Payments);
+        Assert.True(payment.IsVoided);
+        Assert.Equal("wrong amount", payment.VoidReason);
+        Assert.Equal(Now.UtcDateTime, payment.VoidedAtUtc);
+    }
+
+    [Fact]
+    public async Task VoidPayment_ReturnsNullForUnknownLoanOrPayment()
+    {
+        var client = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(client.Id));
+
+        Assert.Null(await service.VoidPaymentAsync(Guid.NewGuid(), Guid.NewGuid(), null));
+        Assert.Null(await service.VoidPaymentAsync(created.Loan.Id, Guid.NewGuid(), null));
+    }
+
+    [Fact]
+    public async Task Search_FiltersLoansByMonth_AndRejectsABadMonth()
+    {
+        var client = AddClient();
+        var service = NewService();
+        await service.CreateAsync(Request(client.Id, loanDate: new DateTime(2026, 10, 15), dueDate: new DateTime(2026, 10, 29)));
+        var november = await service.CreateAsync(Request(client.Id, loanDate: new DateTime(2026, 11, 1), dueDate: new DateTime(2026, 11, 14)));
+
+        var result = await service.SearchAsync(null, null, false, "2026-11");
+
+        Assert.Equal(november.Loan.Id, Assert.Single(result).Id);
+        await Assert.ThrowsAsync<ValidationException>(() => service.SearchAsync(null, null, false, "2026-13"));
+        await Assert.ThrowsAsync<ValidationException>(() => service.SearchAsync(null, null, false, "noviembre"));
+    }
+
+    [Fact]
+    public async Task SearchPayments_FiltersByMonthClientAndVoided()
+    {
+        var ana = AddClient();
+        var luis = AddClient();
+        var service = NewService();
+        var anaLoan = await service.CreateAsync(Request(ana.Id, loanDate: new DateTime(2026, 10, 15), dueDate: new DateTime(2026, 10, 29)));
+        var luisLoan = await service.CreateAsync(Request(luis.Id, loanDate: new DateTime(2026, 10, 15), dueDate: new DateTime(2026, 10, 29)));
+
+        await service.RegisterPaymentAsync(anaLoan.Loan.Id, new RegisterPaymentRequest(12_000m, new DateTime(2026, 10, 20), null));
+        var anaNovember = await service.RegisterPaymentAsync(anaLoan.Loan.Id, new RegisterPaymentRequest(6_000m, new DateTime(2026, 11, 5), null));
+        await service.RegisterPaymentAsync(luisLoan.Loan.Id, new RegisterPaymentRequest(6_000m, new DateTime(2026, 11, 3), null));
+
+        var november = await service.SearchPaymentsAsync(null, "2026-11", includeVoided: false);
+        var onlyLuis = await service.SearchPaymentsAsync(luis.Id, null, includeVoided: false);
+
+        Assert.Equal(2, november.Count);
+        Assert.Equal(new DateTime(2026, 11, 5), november[0].PaymentDate); // newest first
+        Assert.Equal(luis.Id, Assert.Single(onlyLuis).ClientId);
+
+        await service.VoidPaymentAsync(anaLoan.Loan.Id, anaNovember!.Payments.Single(p => p.PaymentDate == new DateTime(2026, 11, 5)).Id, null);
+
+        Assert.Single(await service.SearchPaymentsAsync(null, "2026-11", includeVoided: false));
+        Assert.Equal(2, (await service.SearchPaymentsAsync(null, "2026-11", includeVoided: true)).Count);
+    }
 }

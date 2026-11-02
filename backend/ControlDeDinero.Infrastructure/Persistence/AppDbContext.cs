@@ -90,6 +90,7 @@ public class AppDbContext : DbContext
                 .HasForeignKey(p => p.LoanId);
 
             entity.Property(p => p.Notes).HasMaxLength(500);
+            entity.Property(p => p.VoidReason).HasMaxLength(500);
 
             entity.HasIndex(p => new { p.LoanId, p.PaymentDate });
         });
