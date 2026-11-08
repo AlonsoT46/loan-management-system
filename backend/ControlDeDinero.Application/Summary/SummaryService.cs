@@ -1,3 +1,4 @@
+using ControlDeDinero.Application.Auth;
 using ControlDeDinero.Application.Loans;
 using ControlDeDinero.Domain;
 
@@ -6,11 +7,13 @@ namespace ControlDeDinero.Application.Summary;
 public class SummaryService
 {
     private readonly ILoanRepository _loans;
+    private readonly ICurrentUser _currentUser;
     private readonly TimeProvider _time;
 
-    public SummaryService(ILoanRepository loans, TimeProvider time)
+    public SummaryService(ILoanRepository loans, ICurrentUser currentUser, TimeProvider time)
     {
         _loans = loans;
+        _currentUser = currentUser;
         _time = time;
     }
 
@@ -21,7 +24,7 @@ public class SummaryService
         var today = _time.GetLocalNow().Date;
 
         // For a personal ledger it is simple and fast enough to compute in memory.
-        var loans = (await _loans.ListAllWithPaymentsAsync(cancellationToken))
+        var loans = (await _loans.ListAllWithPaymentsAsync(_currentUser.UserId, cancellationToken))
             .Where(l => l.Status != LoanStatus.Cancelled)
             .ToList();
 

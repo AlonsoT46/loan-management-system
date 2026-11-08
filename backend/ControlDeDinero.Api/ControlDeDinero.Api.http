@@ -31,3 +31,21 @@ POST {{ControlDeDinero.Api_HostAddress}}/api/clients/00000000-0000-0000-0000-000
 
 ### Activate
 POST {{ControlDeDinero.Api_HostAddress}}/api/clients/00000000-0000-0000-0000-000000000000/activate
+
+###############################################################################
+# Since the fifth round every request above (and below) needs a token.
+# Add this line to each of them:   Authorization: Bearer TOKEN
+###############################################################################
+
+### Login: the only endpoint that works without a token. Copy "token" from the response.
+POST {{ControlDeDinero.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "you@example.com",
+  "password": "your password"
+}
+
+### Who am I? Replace TOKEN with the token from the login response
+GET {{ControlDeDinero.Api_HostAddress}}/api/auth/me
+Authorization: Bearer TOKEN

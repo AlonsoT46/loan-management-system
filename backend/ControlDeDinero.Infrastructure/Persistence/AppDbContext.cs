@@ -1,10 +1,16 @@
 using ControlDeDinero.Domain;
+using ControlDeDinero.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace ControlDeDinero.Infrastructure.Persistence;
 
-/// <summary>Main EF Core entry point for the database.</summary>
-public class AppDbContext : DbContext
+/// <summary>
+/// Main EF Core entry point for the database. It also holds the Identity tables (users, roles...),
+/// which is why it inherits from IdentityDbContext instead of DbContext.
+/// </summary>
+public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>
 {
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
@@ -31,6 +37,15 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        // Identity's tables get the same lowercase snake_case naming as the rest.
+        modelBuilder.Entity<ApplicationUser>().ToTable("users");
+        modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");
+        modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("user_roles");
+        modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("user_claims");
+        modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("user_logins");
+        modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("role_claims");
+        modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("user_tokens");
+
         modelBuilder.Entity<Client>(entity =>
         {
             entity.ToTable("clients");
@@ -41,6 +56,14 @@ public class AppDbContext : DbContext
             entity.Property(c => c.Notes).HasMaxLength(500);
 
             entity.HasIndex(c => c.Name); // search by name; NOT unique, two people can share a name
+
+            // The owner is a user account. Client has no navigation property to the user on purpose:
+            // Domain does not know about Identity.
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(c => c.OwnerId);
+
+            entity.HasIndex(c => c.OwnerId);
         });
 
         modelBuilder.Entity<Loan>(entity =>

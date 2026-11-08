@@ -11,15 +11,20 @@ public class SummaryServiceTests
     private static readonly DateTimeOffset Now = new(2026, 11, 2, 2, 0, 0, TimeSpan.Zero);
 
     private readonly FakeClientRepository _clients = new();
-    private readonly FakeLoanRepository _loans = new();
+    private readonly FakeLoanRepository _loans;
 
-    private LoanService NewLoanService() => new(_loans, _clients, new FixedTimeProvider(Now));
+    public SummaryServiceTests()
+    {
+        _loans = new FakeLoanRepository(_clients);
+    }
 
-    private SummaryService NewSummaryService() => new(_loans, new FixedTimeProvider(Now));
+    private LoanService NewLoanService() => new(_loans, _clients, new FakeCurrentUser(), new FixedTimeProvider(Now));
+
+    private SummaryService NewSummaryService() => new(_loans, new FakeCurrentUser(), new FixedTimeProvider(Now));
 
     private Guid AddClient()
     {
-        var client = new Client { Id = Guid.NewGuid(), Name = "Ana" };
+        var client = new Client { Id = Guid.NewGuid(), OwnerId = FakeCurrentUser.DefaultUserId, Name = "Ana" };
         _clients.Clients.Add(client);
         return client.Id;
     }

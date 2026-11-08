@@ -1,3 +1,4 @@
+using ControlDeDinero.Application.Auth;
 using ControlDeDinero.Application.Clients;
 using ControlDeDinero.Domain;
 
@@ -9,18 +10,20 @@ public class LoanService
 
     private readonly ILoanRepository _loans;
     private readonly IClientRepository _clients;
+    private readonly ICurrentUser _currentUser;
     private readonly TimeProvider _time;
 
-    public LoanService(ILoanRepository loans, IClientRepository clients, TimeProvider time)
+    public LoanService(ILoanRepository loans, IClientRepository clients, ICurrentUser currentUser, TimeProvider time)
     {
         _loans = loans;
         _clients = clients;
+        _currentUser = currentUser;
         _time = time;
     }
 
     public async Task<LoanDetailDto> CreateAsync(CreateLoanRequest request, CancellationToken cancellationToken = default)
     {
-        var client = await _clients.GetByIdAsync(request.ClientId, cancellationToken)
+        var client = await _clients.GetByIdAsync(_currentUser.UserId, request.ClientId, cancellationToken)
             ?? throw new ValidationException("Client not found.");
 
         if (!client.IsActive)
@@ -57,7 +60,7 @@ public class LoanService
 
     public async Task<LoanDetailDto?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var loan = await _loans.GetByIdWithPaymentsAsync(id, cancellationToken);
+        var loan = await _loans.GetByIdWithPaymentsAsync(_currentUser.UserId, id, cancellationToken);
         if (loan is null)
             return null;
 
@@ -76,6 +79,7 @@ public class LoanService
         var today = Today();
 
         var loans = await _loans.SearchAsync(
+            _currentUser.UserId,
             clientId,
             status,
             onlyOverdue ? today : null,
@@ -96,7 +100,7 @@ public class LoanService
         CancellationToken cancellationToken = default)
     {
         var (from, to) = MonthRange.Parse(month);
-        var payments = await _loans.SearchPaymentsAsync(clientId, from, to, includeVoided, cancellationToken);
+        var payments = await _loans.SearchPaymentsAsync(_currentUser.UserId, clientId, from, to, includeVoided, cancellationToken);
 
         return payments
             .Select(p => new PaymentListItemDto(
@@ -117,7 +121,7 @@ public class LoanService
         RegisterPaymentRequest request,
         CancellationToken cancellationToken = default)
     {
-        var loan = await _loans.GetByIdWithPaymentsAsync(loanId, cancellationToken);
+        var loan = await _loans.GetByIdWithPaymentsAsync(_currentUser.UserId, loanId, cancellationToken);
         if (loan is null)
             return null;
 
@@ -146,7 +150,7 @@ public class LoanService
         VoidPaymentRequest? request,
         CancellationToken cancellationToken = default)
     {
-        var loan = await _loans.GetByIdWithPaymentsAsync(loanId, cancellationToken);
+        var loan = await _loans.GetByIdWithPaymentsAsync(_currentUser.UserId, loanId, cancellationToken);
         if (loan is null || loan.Payments.All(p => p.Id != paymentId))
             return null;
 
@@ -173,7 +177,7 @@ public class LoanService
         CancelLoanRequest? request,
         CancellationToken cancellationToken = default)
     {
-        var loan = await _loans.GetByIdWithPaymentsAsync(loanId, cancellationToken);
+        var loan = await _loans.GetByIdWithPaymentsAsync(_currentUser.UserId, loanId, cancellationToken);
         if (loan is null)
             return null;
 

@@ -17,12 +17,12 @@ internal sealed class FakeClientRepository : IClientRepository
         return Task.CompletedTask;
     }
 
-    public Task<Client?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Clients.FirstOrDefault(c => c.Id == id));
+    public Task<Client?> GetByIdAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Clients.FirstOrDefault(c => c.OwnerId == ownerId && c.Id == id));
 
-    public Task<IReadOnlyList<Client>> SearchAsync(string? term, bool includeInactive, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Client>> SearchAsync(Guid ownerId, string? term, bool includeInactive, CancellationToken cancellationToken = default)
     {
-        IEnumerable<Client> query = Clients;
+        IEnumerable<Client> query = Clients.Where(c => c.OwnerId == ownerId);
 
         if (!includeInactive)
             query = query.Where(c => c.IsActive);
@@ -34,10 +34,10 @@ internal sealed class FakeClientRepository : IClientRepository
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<Client>> FindActiveByNameAsync(string name, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Client>> FindActiveByNameAsync(Guid ownerId, string name, CancellationToken cancellationToken = default)
     {
         IReadOnlyList<Client> result = Clients
-            .Where(c => c.IsActive && string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.OwnerId == ownerId && c.IsActive && string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))
             .ToList();
         return Task.FromResult(result);
     }
@@ -51,6 +51,13 @@ internal sealed class FakeClientRepository : IClientRepository
 
 internal sealed class FakeLoanRepository : ILoanRepository
 {
+    private readonly FakeClientRepository _clients;
+
+    public FakeLoanRepository(FakeClientRepository clients)
+    {
+        _clients = clients;
+    }
+
     public List<Loan> Loans { get; } = new();
     public int SaveCount { get; private set; }
 
@@ -60,10 +67,15 @@ internal sealed class FakeLoanRepository : ILoanRepository
         return Task.CompletedTask;
     }
 
-    public Task<Loan?> GetByIdWithPaymentsAsync(Guid id, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Loans.FirstOrDefault(l => l.Id == id));
+    // A loan belongs to whoever owns its client, as in the real database.
+    private IEnumerable<Loan> OwnedBy(Guid ownerId) =>
+        Loans.Where(l => _clients.Clients.Any(c => c.Id == l.ClientId && c.OwnerId == ownerId));
+
+    public Task<Loan?> GetByIdWithPaymentsAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(OwnedBy(ownerId).FirstOrDefault(l => l.Id == id));
 
     public Task<IReadOnlyList<Loan>> SearchAsync(
+        Guid ownerId,
         Guid? clientId,
         LoanStatus? status,
         DateTime? overdueAsOf,
@@ -71,7 +83,7 @@ internal sealed class FakeLoanRepository : ILoanRepository
         DateTime? loanDateTo,
         CancellationToken cancellationToken = default)
     {
-        IEnumerable<Loan> query = Loans;
+        IEnumerable<Loan> query = OwnedBy(ownerId);
 
         if (clientId.HasValue)
             query = query.Where(l => l.ClientId == clientId.Value);
@@ -95,13 +107,14 @@ internal sealed class FakeLoanRepository : ILoanRepository
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<Loan>> ListAllWithPaymentsAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Loan>> ListAllWithPaymentsAsync(Guid ownerId, CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<Loan> result = Loans.ToList();
+        IReadOnlyList<Loan> result = OwnedBy(ownerId).ToList();
         return Task.FromResult(result);
     }
 
     public Task<IReadOnlyList<Payment>> SearchPaymentsAsync(
+        Guid ownerId,
         Guid? clientId,
         DateTime? from,
         DateTime? to,
@@ -110,7 +123,7 @@ internal sealed class FakeLoanRepository : ILoanRepository
     {
         var payments = new List<Payment>();
 
-        foreach (var loan in Loans)
+        foreach (var loan in OwnedBy(ownerId))
         {
             if (clientId.HasValue && loan.ClientId != clientId.Value)
                 continue;
@@ -150,6 +163,14 @@ internal sealed class FakeLoanRepository : ILoanRepository
 
     private static void SetProperty(object target, string name, object? value) =>
         target.GetType().GetProperty(name)!.SetValue(target, value);
+}
+
+/// <summary>The logged-in user of the test. Change UserId to act as somebody else.</summary>
+internal sealed class FakeCurrentUser : ControlDeDinero.Application.Auth.ICurrentUser
+{
+    public static readonly Guid DefaultUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+    public Guid UserId { get; set; } = DefaultUserId;
 }
 
 /// <summary>A clock frozen at a given UTC instant, whose local time zone is UTC-6 (Costa Rica).</summary>

@@ -11,13 +11,18 @@ public class LoanServiceTests
     private static readonly DateTime CostaRicaToday = new(2026, 11, 1);
 
     private readonly FakeClientRepository _clients = new();
-    private readonly FakeLoanRepository _loans = new();
+    private readonly FakeLoanRepository _loans;
 
-    private LoanService NewService() => new(_loans, _clients, new FixedTimeProvider(Now));
+    public LoanServiceTests()
+    {
+        _loans = new FakeLoanRepository(_clients);
+    }
+
+    private LoanService NewService() => new(_loans, _clients, new FakeCurrentUser(), new FixedTimeProvider(Now));
 
     private Client AddClient(bool isActive = true)
     {
-        var client = new Client { Id = Guid.NewGuid(), Name = "Ana", IsActive = isActive };
+        var client = new Client { Id = Guid.NewGuid(), OwnerId = FakeCurrentUser.DefaultUserId, Name = "Ana", IsActive = isActive };
         _clients.Clients.Add(client);
         return client;
     }

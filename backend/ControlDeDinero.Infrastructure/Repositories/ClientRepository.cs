@@ -19,16 +19,18 @@ public class ClientRepository : IClientRepository
         await _db.Clients.AddAsync(client, cancellationToken);
     }
 
-    public Task<Client?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        _db.Clients.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+    // A client of another user is "not found", exactly as if it did not exist.
+    public Task<Client?> GetByIdAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
+        _db.Clients.FirstOrDefaultAsync(c => c.OwnerId == ownerId && c.Id == id, cancellationToken);
 
     // Text comparisons are case-insensitive because MySQL's default collation is.
     public async Task<IReadOnlyList<Client>> SearchAsync(
+        Guid ownerId,
         string? term,
         bool includeInactive,
         CancellationToken cancellationToken = default)
     {
-        var query = _db.Clients.AsNoTracking();
+        var query = _db.Clients.AsNoTracking().Where(c => c.OwnerId == ownerId);
 
         if (!includeInactive)
             query = query.Where(c => c.IsActive);
@@ -39,11 +41,11 @@ public class ClientRepository : IClientRepository
         return await query.OrderBy(c => c.Name).ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Client>> FindActiveByNameAsync(string name, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Client>> FindActiveByNameAsync(Guid ownerId, string name, CancellationToken cancellationToken = default)
     {
         return await _db.Clients
             .AsNoTracking()
-            .Where(c => c.IsActive && c.Name == name)
+            .Where(c => c.OwnerId == ownerId && c.IsActive && c.Name == name)
             .ToListAsync(cancellationToken);
     }
 

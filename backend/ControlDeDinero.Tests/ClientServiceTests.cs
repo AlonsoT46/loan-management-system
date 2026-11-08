@@ -8,7 +8,7 @@ public class ClientServiceTests
 {
     private readonly FakeClientRepository _repository = new();
 
-    private ClientService NewService() => new(_repository);
+    private ClientService NewService() => new(_repository, new FakeCurrentUser());
 
     [Fact]
     public async Task Create_TrimsFieldsAndSaves()

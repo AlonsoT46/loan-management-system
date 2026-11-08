@@ -21,14 +21,16 @@ public class LoanRepository : ILoanRepository
 
     // Tracked on purpose: RegisterPayment changes the loan and adds a payment, and
     // SaveChanges persists both in one transaction.
-    public Task<Loan?> GetByIdWithPaymentsAsync(Guid id, CancellationToken cancellationToken = default) =>
+    // A loan is the owner's when its client is. Another user's loan is "not found".
+    public Task<Loan?> GetByIdWithPaymentsAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
         _db.Loans
             .Include(l => l.Client)
             .Include(l => l.Payments)
                 .ThenInclude(p => p.Allocations)
-            .FirstOrDefaultAsync(l => l.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(l => l.Id == id && l.Client!.OwnerId == ownerId, cancellationToken);
 
     public async Task<IReadOnlyList<Loan>> SearchAsync(
+        Guid ownerId,
         Guid? clientId,
         LoanStatus? status,
         DateTime? overdueAsOf,
@@ -38,7 +40,8 @@ public class LoanRepository : ILoanRepository
     {
         IQueryable<Loan> query = _db.Loans
             .AsNoTracking()
-            .Include(l => l.Client);
+            .Include(l => l.Client)
+            .Where(l => l.Client!.OwnerId == ownerId);
 
         if (clientId.HasValue)
             query = query.Where(l => l.ClientId == clientId.Value);
@@ -64,16 +67,18 @@ public class LoanRepository : ILoanRepository
         return await query.OrderBy(l => l.DueDate).ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Loan>> ListAllWithPaymentsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Loan>> ListAllWithPaymentsAsync(Guid ownerId, CancellationToken cancellationToken = default)
     {
         return await _db.Loans
             .AsNoTracking()
+            .Where(l => l.Client!.OwnerId == ownerId)
             .Include(l => l.Payments)
                 .ThenInclude(p => p.Allocations)
             .ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<Payment>> SearchPaymentsAsync(
+        Guid ownerId,
         Guid? clientId,
         DateTime? from,
         DateTime? to,
@@ -85,6 +90,8 @@ public class LoanRepository : ILoanRepository
             .Include(p => p.Allocations)
             .Include(p => p.Loan)
                 .ThenInclude(l => l!.Client);
+
+        query = query.Where(p => p.Loan!.Client!.OwnerId == ownerId);
 
         if (clientId.HasValue)
             query = query.Where(p => p.Loan!.ClientId == clientId.Value);

@@ -1,3 +1,4 @@
+using ControlDeDinero.Application.Auth;
 using ControlDeDinero.Domain;
 
 namespace ControlDeDinero.Application.Clients;
@@ -9,10 +10,12 @@ public class ClientService
     public const int MaxNotesLength = 500;
 
     private readonly IClientRepository _repository;
+    private readonly ICurrentUser _currentUser;
 
-    public ClientService(IClientRepository repository)
+    public ClientService(IClientRepository repository, ICurrentUser currentUser)
     {
         _repository = repository;
+        _currentUser = currentUser;
     }
 
     public async Task<CreateClientResult> CreateAsync(CreateClientRequest request, CancellationToken cancellationToken = default)
@@ -20,11 +23,12 @@ public class ClientService
         var (name, phone, notes) = Validate(request.Name, request.Phone, request.Notes);
 
         // Looked up before adding, so the new client is not reported as its own duplicate.
-        var duplicates = await _repository.FindActiveByNameAsync(name, cancellationToken);
+        var duplicates = await _repository.FindActiveByNameAsync(_currentUser.UserId, name, cancellationToken);
 
         var client = new Client
         {
             Id = Guid.NewGuid(),
+            OwnerId = _currentUser.UserId,
             Name = name,
             Phone = phone,
             Notes = notes
@@ -40,7 +44,7 @@ public class ClientService
 
     public async Task<ClientDto?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var client = await _repository.GetByIdAsync(id, cancellationToken);
+        var client = await _repository.GetByIdAsync(_currentUser.UserId, id, cancellationToken);
         return client is null ? null : ClientDto.From(client);
     }
 
@@ -50,7 +54,7 @@ public class ClientService
         CancellationToken cancellationToken = default)
     {
         var cleanTerm = string.IsNullOrWhiteSpace(term) ? null : term.Trim();
-        var clients = await _repository.SearchAsync(cleanTerm, includeInactive, cancellationToken);
+        var clients = await _repository.SearchAsync(_currentUser.UserId, cleanTerm, includeInactive, cancellationToken);
         return clients.Select(ClientDto.From).ToList();
     }
 
@@ -58,7 +62,7 @@ public class ClientService
     {
         var (name, phone, notes) = Validate(request.Name, request.Phone, request.Notes);
 
-        var client = await _repository.GetByIdAsync(id, cancellationToken);
+        var client = await _repository.GetByIdAsync(_currentUser.UserId, id, cancellationToken);
         if (client is null)
             return null;
 
@@ -78,7 +82,7 @@ public class ClientService
 
     private async Task<ClientDto?> SetActiveAsync(Guid id, bool isActive, CancellationToken cancellationToken)
     {
-        var client = await _repository.GetByIdAsync(id, cancellationToken);
+        var client = await _repository.GetByIdAsync(_currentUser.UserId, id, cancellationToken);
         if (client is null)
             return null;
 
