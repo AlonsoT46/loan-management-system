@@ -49,3 +49,13 @@ Content-Type: application/json
 ### Who am I? Replace TOKEN with the token from the login response
 GET {{ControlDeDinero.Api_HostAddress}}/api/auth/me
 Authorization: Bearer TOKEN
+
+### Change my password (returns a new token; the old one stops working)
+POST {{ControlDeDinero.Api_HostAddress}}/api/auth/change-password
+Authorization: Bearer TOKEN
+Content-Type: application/json
+
+{
+  "currentPassword": "current password",
+  "newPassword": "new password, 10+ characters"
+}

@@ -26,14 +26,9 @@ public static class CreateUserCommand
         }
 
         var email = args[1].Trim();
-        var password = ReadPassword("Password: ");
-        var confirmation = ReadPassword("Repeat the password: ");
-
-        if (password != confirmation)
-        {
-            Console.Error.WriteLine("The passwords do not match. No account was created.");
+        var password = ConsoleInput.ReadNewPassword();
+        if (password is null)
             return 1;
-        }
 
         using var scope = app.Services.CreateScope();
         var provisioner = scope.ServiceProvider.GetRequiredService<UserProvisioner>();
@@ -51,34 +46,5 @@ public static class CreateUserCommand
             Console.WriteLine($"{result.AdoptedClients} existing client(s) now belong to this account.");
 
         return 0;
-    }
-
-    private static string ReadPassword(string prompt)
-    {
-        Console.Write(prompt);
-        var chars = new List<char>();
-
-        while (true)
-        {
-            var key = Console.ReadKey(intercept: true);
-
-            if (key.Key == ConsoleKey.Enter)
-            {
-                Console.WriteLine();
-                break;
-            }
-
-            if (key.Key == ConsoleKey.Backspace)
-            {
-                if (chars.Count > 0)
-                    chars.RemoveAt(chars.Count - 1);
-                continue;
-            }
-
-            if (!char.IsControl(key.KeyChar))
-                chars.Add(key.KeyChar);
-        }
-
-        return new string(chars.ToArray());
     }
 }

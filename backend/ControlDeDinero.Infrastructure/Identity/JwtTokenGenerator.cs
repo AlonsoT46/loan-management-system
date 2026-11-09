@@ -36,6 +36,8 @@ public class JwtTokenGenerator
             {
                 new Claim("sub", user.Id.ToString()),
                 new Claim("email", user.Email ?? string.Empty),
+                // Changes when the password changes; TokenSessionValidator compares it on every request.
+                new Claim("stamp", user.SecurityStamp ?? string.Empty),
                 new Claim("jti", Guid.NewGuid().ToString())
             }),
             SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256)

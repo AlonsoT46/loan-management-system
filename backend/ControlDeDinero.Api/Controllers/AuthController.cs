@@ -29,6 +29,17 @@ public class AuthController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>
+    /// Changes the password of the logged-in user. Other sessions (other phones) stop working;
+    /// the response carries a new token for this one.
+    /// </summary>
+    [HttpPost("change-password")]
+    public async Task<ActionResult<LoginResponse>> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        var response = await _auth.ChangePasswordAsync(_currentUser.UserId, request, cancellationToken);
+        return Ok(response);
+    }
+
     /// <summary>Handy to check that a token works: returns the id of the logged-in user.</summary>
     [HttpGet("me")]
     public ActionResult<MeResponse> Me() => Ok(new MeResponse(_currentUser.UserId));

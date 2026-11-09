@@ -12,6 +12,7 @@ using ControlDeDinero.Infrastructure.Repositories;
 using ControlDeDinero.Infrastructure.Time;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -45,7 +46,8 @@ builder.Services
         options.Password.RequireUppercase = false;
         options.Password.RequireNonAlphanumeric = false;
     })
-    .AddEntityFrameworkStores<AppDbContext>();
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders(); // needed by the reset-password command
 
 // Login token (JWT). The signing key is a secret: dotnet user-secrets set "Jwt:Key" "<long random text>"
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
@@ -71,6 +73,21 @@ builder.Services
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
         };
+
+        // A valid signature is not enough: the token must carry the user's current SecurityStamp.
+        // Changing or resetting the password changes the stamp, so older tokens stop working.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var validator = context.HttpContext.RequestServices.GetRequiredService<TokenSessionValidator>();
+                var userId = context.Principal?.FindFirst("sub")?.Value;
+                var stamp = context.Principal?.FindFirst("stamp")?.Value;
+
+                if (!await validator.IsStillValidAsync(userId, stamp))
+                    context.Fail("This session is no longer valid. Log in again.");
+            }
+        };
     });
 
 // Every endpoint requires a logged-in user unless it says [AllowAnonymous] (only login does).
@@ -87,6 +104,7 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddSingleton<JwtTokenGenerator>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<UserProvisioner>();
+builder.Services.AddScoped<TokenSessionValidator>();
 
 builder.Services.AddScoped<IClientRepository, ClientRepository>();
 builder.Services.AddScoped<ClientService>();
@@ -115,10 +133,14 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Terminal command instead of starting the web server:
+// Terminal commands instead of starting the web server:
 //   dotnet run --project ControlDeDinero.Api -- create-user someone@example.com
+//   dotnet run --project ControlDeDinero.Api -- reset-password someone@example.com
 if (args.Length > 0 && args[0] == CreateUserCommand.Name)
     return await CreateUserCommand.RunAsync(app, args);
+
+if (args.Length > 0 && args[0] == ResetPasswordCommand.Name)
+    return await ResetPasswordCommand.RunAsync(app, args);
 
 app.UseExceptionHandler();
 

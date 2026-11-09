@@ -43,4 +43,25 @@ public class UserProvisioner
 
         return new UserProvisioningResult(true, Array.Empty<string>(), orphans.Count);
     }
+
+    /// <summary>
+    /// Sets a new password without knowing the old one (for when someone forgets it) and unlocks the
+    /// account. Identity changes the SecurityStamp, so every session already open stops working.
+    /// Returns the problems found; an empty list means it worked.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ResetPasswordAsync(string email, string newPassword)
+    {
+        var user = await _users.FindByEmailAsync(email);
+        if (user is null)
+            return new[] { "There is no account with that email." };
+
+        var token = await _users.GeneratePasswordResetTokenAsync(user);
+        var result = await _users.ResetPasswordAsync(user, token, newPassword);
+        if (!result.Succeeded)
+            return result.Errors.Select(e => e.Description).ToList();
+
+        await _users.SetLockoutEndDateAsync(user, null);
+        await _users.ResetAccessFailedCountAsync(user);
+        return Array.Empty<string>();
+    }
 }

@@ -1,3 +1,4 @@
+using ControlDeDinero.Application;
 using ControlDeDinero.Application.Auth;
 using Microsoft.AspNetCore.Identity;
 
@@ -36,6 +37,23 @@ public class AuthService : IAuthService
         }
 
         await _users.ResetAccessFailedCountAsync(user);
+        return _tokens.Create(user);
+    }
+
+    public async Task<LoginResponse> ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(request.CurrentPassword) || string.IsNullOrEmpty(request.NewPassword))
+            throw new ValidationException("Current and new password are required.");
+
+        var user = await _users.FindByIdAsync(userId.ToString())
+            ?? throw new ValidationException("User not found.");
+
+        // Identity checks the current password, validates the new one and changes the SecurityStamp.
+        var result = await _users.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded)
+            throw new ValidationException(string.Join(" ", result.Errors.Select(e => e.Description)));
+
+        // The token used for this request now has an old stamp, so hand out a fresh one.
         return _tokens.Create(user);
     }
 }
