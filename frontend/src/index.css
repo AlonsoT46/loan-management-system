@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* Dark mode is controlled by a "dark" class on <html> (see theme/ThemeProvider.tsx). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Fixed tokens, inspired by the reference design. Each --color-x becomes classes like bg-x, text-x. */
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --color-accent: #82e6fb;
+  --color-on-accent: #1e1e1e;
+  --color-gain: #3fae52;
+  --color-loss: #e5484d;
+}
+
+/* Tokens that change between light and dark. The classes (bg-surface, text-muted...) read the
+   variables below, so the screens do not need a dark: version of every color. */
+@theme inline {
+  --color-ink: var(--ink);
+  --color-surface: var(--surface);
+  --color-page: var(--page);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+}
+
+:root {
+  --ink: #1e1e1e;
+  --surface: #ffffff;
+  --page: #f1f5f9;
+  --line: #e2e8f0;
+  --muted: #8a94a6;
+  --chart-1: #1990b8; /* chart series 1: principal that came back */
+  --chart-2: #eb6834; /* chart series 2: still out / interest */
+  --chart-3: #8a63d2; /* chart series 3: given up for lost */
+}
+
+.dark {
+  --ink: #f2f2f2;
+  --surface: #141414;
+  --page: #0a0a0a;
+  --line: #2a2a2a;
+  --muted: #8b8b8b;
+  --chart-1: #2aa3cc;
+  --chart-2: #d95926;
+  --chart-3: #9b7be0;
+  color-scheme: dark; /* native controls (date pickers, scrollbars) also go dark */
+}
+
+body {
+  @apply bg-page font-sans text-ink antialiased;
+}

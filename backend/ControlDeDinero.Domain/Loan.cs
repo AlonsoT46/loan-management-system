@@ -86,6 +86,54 @@ public class Loan
     }
 
     /// <summary>
+    /// Corrects a loan registered with a mistake: client, principal or dates. Interest and total are
+    /// calculated again with the loan's own rate. Only while no payment counts: the split of a payment
+    /// between principal and interest depends on these amounts, so changing them afterwards would
+    /// leave the past payments wrong. To correct a loan with payments, void them first.
+    /// </summary>
+    public void UpdateTerms(Guid clientId, decimal principalAmount, DateTime loanDate, DateTime dueDate)
+    {
+        if (Status != LoanStatus.Active)
+            throw new InvalidOperationException("Only active loans can be edited.");
+
+        if (Payments.Any(p => !p.IsVoided))
+            throw new InvalidOperationException("A loan with payments cannot change its amounts or dates. Void the payments first.");
+
+        if (clientId == Guid.Empty)
+            throw new ArgumentException("A loan needs a client.", nameof(clientId));
+
+        principalAmount = RoundMoney(principalAmount);
+        if (principalAmount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(principalAmount), "Principal must be greater than zero.");
+
+        if (dueDate < loanDate)
+            throw new ArgumentException("Due date cannot be before the loan date.", nameof(dueDate));
+
+        var before = Describe();
+
+        var quincenas = CountQuincenas(loanDate, dueDate);
+        var interest = RoundMoney(principalAmount * InterestRatePerQuincena / 100m * quincenas);
+
+        ClientId = clientId;
+        PrincipalAmount = principalAmount;
+        LoanDate = loanDate;
+        DueDate = dueDate;
+        Quincenas = quincenas;
+        InterestAmount = interest;
+        TotalAmount = principalAmount + interest;
+        TotalPaid = 0m; // no payment counts (checked above)
+        RemainingBalance = TotalAmount;
+
+        AuditEvents.Add(new AuditEvent(Id, "LoanEdited", "Loan edited. Before: " + before + ". After: " + Describe() + "."));
+    }
+
+    private string Describe() =>
+        "principal " + Format(PrincipalAmount)
+        + ", " + LoanDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        + " to " + DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        + ", total " + Format(TotalAmount);
+
+    /// <summary>
     /// Records a payment and splits it between principal and interest in proportion to the
     /// loan totals. The final payment absorbs any rounding difference. Requires
     /// <see cref="Payments"/> (with their allocations) to be loaded.
@@ -177,7 +225,9 @@ public class Loan
 
         TotalPaid = Payments.Where(p => !p.IsVoided).Sum(p => p.Amount);
         RemainingBalance = TotalAmount - TotalPaid;
-        Status = RemainingBalance == 0m ? LoanStatus.Paid : LoanStatus.Active;
+        // An archived loan stays archived: voiding a payment does not bring it back by itself.
+        if (Status != LoanStatus.Archived)
+            Status = RemainingBalance == 0m ? LoanStatus.Paid : LoanStatus.Active;
 
         AuditEvents.Add(new AuditEvent(
             Id,
@@ -207,6 +257,34 @@ public class Loan
             Id,
             "LoanCancelled",
             reason is null ? "Loan cancelled." : "Loan cancelled: " + reason));
+    }
+
+    /// <summary>
+    /// Archives ("writes off") an active loan the lender no longer expects to recover. It stops
+    /// counting as money to collect and stops accepting payments, but stays in the history and can
+    /// be unarchived (for example, if the client starts paying again).
+    /// </summary>
+    public void Archive(string? reason = null)
+    {
+        if (Status != LoanStatus.Active)
+            throw new InvalidOperationException("Only active loans can be archived.");
+
+        Status = LoanStatus.Archived;
+
+        AuditEvents.Add(new AuditEvent(
+            Id,
+            "LoanArchived",
+            reason is null ? "Loan archived (written off)." : "Loan archived (written off): " + reason));
+    }
+
+    public void Unarchive()
+    {
+        if (Status != LoanStatus.Archived)
+            throw new InvalidOperationException("Only archived loans can be unarchived.");
+
+        Status = RemainingBalance == 0m ? LoanStatus.Paid : LoanStatus.Active;
+
+        AuditEvents.Add(new AuditEvent(Id, "LoanUnarchived", "Loan unarchived."));
     }
 
     /// <summary>

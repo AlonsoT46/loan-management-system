@@ -17,3 +17,16 @@ public record RegisterPaymentRequest(decimal Amount, DateTime? PaymentDate, stri
 public record VoidPaymentRequest(string? Reason);
 
 public record CancelLoanRequest(string? Reason);
+
+public record ArchiveLoanRequest(string? Reason);
+
+/// <summary>
+/// Correction of a loan. Client, principal and dates can only change while the loan has no payments;
+/// the notes can always change. LoanDate defaults to the current one when omitted.
+/// </summary>
+public record UpdateLoanRequest(
+    Guid ClientId,
+    decimal PrincipalAmount,
+    DateTime? LoanDate,
+    DateTime? DueDate,
+    string? Notes);

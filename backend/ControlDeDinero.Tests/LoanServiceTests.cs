@@ -314,4 +314,88 @@ public class LoanServiceTests
         Assert.Single(await service.SearchPaymentsAsync(null, "2026-11", includeVoided: false));
         Assert.Equal(2, (await service.SearchPaymentsAsync(null, "2026-11", includeVoided: true)).Count);
     }
+
+    [Fact]
+    public async Task Archive_AndUnarchive_ChangeTheStatus()
+    {
+        var client = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(client.Id));
+
+        var archived = await service.ArchiveAsync(created.Loan.Id, new ArchiveLoanRequest("no va a pagar"));
+        Assert.Equal("Archived", archived!.Loan.Status);
+        Assert.False(archived.Loan.IsOverdue);
+
+        var back = await service.UnarchiveAsync(created.Loan.Id);
+        Assert.Equal("Active", back!.Loan.Status);
+    }
+
+    [Fact]
+    public async Task Archive_RejectsArchivingTwice()
+    {
+        var client = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(client.Id));
+        await service.ArchiveAsync(created.Loan.Id, null);
+
+        await Assert.ThrowsAsync<ValidationException>(() => service.ArchiveAsync(created.Loan.Id, null));
+    }
+
+    [Fact]
+    public async Task Archive_ReturnsNullWhenLoanDoesNotExist()
+    {
+        Assert.Null(await NewService().ArchiveAsync(Guid.NewGuid(), null));
+        Assert.Null(await NewService().UnarchiveAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Update_ChangesClientAmountAndDates()
+    {
+        var ana = AddClient();
+        var luis = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(ana.Id, 50_000m, new DateTime(2026, 11, 1), new DateTime(2026, 11, 14)));
+
+        var updated = await service.UpdateAsync(created.Loan.Id, new UpdateLoanRequest(
+            luis.Id, 100_000m, new DateTime(2026, 11, 1), new DateTime(2026, 11, 30), "corregido"));
+
+        Assert.Equal(luis.Id, updated!.Loan.ClientId);
+        Assert.Equal(100_000m, updated.Loan.PrincipalAmount);
+        Assert.Equal(2, updated.Loan.Quincenas);
+        Assert.Equal(140_000m, updated.Loan.TotalAmount);
+        Assert.Equal("corregido", updated.Loan.Notes);
+    }
+
+    [Fact]
+    public async Task Update_WithPayments_AllowsOnlyTheNotes()
+    {
+        var client = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(client.Id, 50_000m, new DateTime(2026, 11, 1), new DateTime(2026, 11, 14)));
+        await service.RegisterPaymentAsync(created.Loan.Id, new RegisterPaymentRequest(1_000m, null, null));
+
+        var notesOnly = await service.UpdateAsync(created.Loan.Id, new UpdateLoanRequest(
+            client.Id, 50_000m, new DateTime(2026, 11, 1), new DateTime(2026, 11, 14), "solo la nota"));
+        Assert.Equal("solo la nota", notesOnly!.Loan.Notes);
+
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(created.Loan.Id, new UpdateLoanRequest(
+            client.Id, 80_000m, new DateTime(2026, 11, 1), new DateTime(2026, 11, 14), null)));
+    }
+
+    [Fact]
+    public async Task Update_RejectsAClientOfAnotherUser_AndReturnsNullForUnknownLoan()
+    {
+        var client = AddClient();
+        var service = NewService();
+        var created = await service.CreateAsync(Request(client.Id));
+
+        var stranger = new Client { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid(), Name = "Otro" };
+        _clients.Clients.Add(stranger);
+
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(created.Loan.Id, new UpdateLoanRequest(
+            stranger.Id, 50_000m, null, new DateTime(2026, 11, 14), null)));
+
+        Assert.Null(await service.UpdateAsync(Guid.NewGuid(), new UpdateLoanRequest(
+            client.Id, 1_000m, null, new DateTime(2026, 11, 14), null)));
+    }
 }

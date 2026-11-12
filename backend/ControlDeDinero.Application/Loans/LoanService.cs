@@ -197,6 +197,107 @@ public class LoanService
         return ToDetail(loan, loan.Client?.Name ?? string.Empty, Today());
     }
 
+    /// <summary>
+    /// Corrects a loan. If client, principal or dates change, the domain recalculates the loan (only
+    /// allowed without payments); if only the notes change, any loan accepts it.
+    /// Returns null if the loan does not exist.
+    /// </summary>
+    public async Task<LoanDetailDto?> UpdateAsync(
+        Guid loanId,
+        UpdateLoanRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var loan = await _loans.GetByIdWithPaymentsAsync(_currentUser.UserId, loanId, cancellationToken);
+        if (loan is null)
+            return null;
+
+        if (request.DueDate is null)
+            throw new ValidationException("Due date is required.");
+
+        var notes = CleanText(request.Notes, "Notes");
+        var loanDate = (request.LoanDate ?? loan.LoanDate).Date;
+        var dueDate = request.DueDate.Value.Date;
+        var principal = decimal.Round(request.PrincipalAmount, 2, MidpointRounding.AwayFromZero);
+        var clientName = loan.Client?.Name ?? string.Empty;
+
+        var termsChanged =
+            request.ClientId != loan.ClientId ||
+            principal != loan.PrincipalAmount ||
+            loanDate != loan.LoanDate.Date ||
+            dueDate != loan.DueDate.Date;
+
+        if (termsChanged)
+        {
+            // The new client must be one of this user's clients (another user's is "not found").
+            var client = await _clients.GetByIdAsync(_currentUser.UserId, request.ClientId, cancellationToken)
+                ?? throw new ValidationException("Client not found.");
+
+            if (!client.IsActive && client.Id != loan.ClientId)
+                throw new ValidationException("The client is inactive.");
+
+            try
+            {
+                loan.UpdateTerms(client.Id, principal, loanDate, dueDate);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                throw new ValidationException(ex.Message);
+            }
+
+            clientName = client.Name;
+        }
+
+        loan.Notes = notes;
+
+        await _loans.SaveChangesAsync(cancellationToken);
+        return ToDetail(loan, clientName, Today());
+    }
+
+    /// <summary>Archives (writes off) an active loan. Returns null if the loan does not exist.</summary>
+    public async Task<LoanDetailDto?> ArchiveAsync(
+        Guid loanId,
+        ArchiveLoanRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        var loan = await _loans.GetByIdWithPaymentsAsync(_currentUser.UserId, loanId, cancellationToken);
+        if (loan is null)
+            return null;
+
+        var reason = CleanText(request?.Reason, "Reason");
+
+        try
+        {
+            loan.Archive(reason);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ValidationException(ex.Message);
+        }
+
+        await _loans.SaveChangesAsync(cancellationToken);
+        return ToDetail(loan, loan.Client?.Name ?? string.Empty, Today());
+    }
+
+    /// <summary>Brings an archived loan back. Returns null if the loan does not exist.</summary>
+    public async Task<LoanDetailDto?> UnarchiveAsync(Guid loanId, CancellationToken cancellationToken = default)
+    {
+        var loan = await _loans.GetByIdWithPaymentsAsync(_currentUser.UserId, loanId, cancellationToken);
+        if (loan is null)
+            return null;
+
+        try
+        {
+            loan.Unarchive();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ValidationException(ex.Message);
+        }
+
+        await _loans.SaveChangesAsync(cancellationToken);
+        return ToDetail(loan, loan.Client?.Name ?? string.Empty, Today());
+    }
+
     /// <summary>Today's date in the configured time zone (Costa Rica in production).</summary>
     private DateTime Today() => _time.GetLocalNow().Date;
 

@@ -24,4 +24,15 @@ public class SummaryController : ControllerBase
         var summary = await _service.GetAsync(month, cancellationToken);
         return Ok(summary);
     }
+
+    /// <summary>
+    /// Month by month for the charts: /api/summary/monthly?months=6 gives the last 6 months,
+    /// oldest first (lent, still out, principal and interest collected).
+    /// </summary>
+    [HttpGet("monthly")]
+    public async Task<ActionResult<IReadOnlyList<MonthlyPointDto>>> Monthly([FromQuery] int? months, CancellationToken cancellationToken)
+    {
+        var points = await _service.GetMonthlyAsync(months ?? 6, cancellationToken);
+        return Ok(points);
+    }
 }

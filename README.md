@@ -4,7 +4,7 @@
 
 Control de Dinero is meant to help one person replace a handwritten lending notebook with a clear, searchable record of clients, loans, installments, payments, and interest earnings.
 
-> **Project status:** backend in progress. The domain model, database, unit tests and the API for **clients, loans and payments** exist (tested manually with Postman). There is **no frontend and no authentication yet**: the features listed below are the agreed scope, not completed functionality.
+> **Project status:** in progress. The backend (domain model, database, unit tests, API for **accounts and login, clients, loans, payments and a financial summary**) works and was tested manually with Postman. A first **mobile-first frontend** (React) lives in `frontend/`: login, home summary, loans, clients with their loan history, new client and new loan forms, monthly statistics and dark mode. Payments can be registered (and voided) from the loan screen, and the statistics screen has monthly charts.
 
 ## Why this project?
 
@@ -97,14 +97,26 @@ loan-management-system/
 
 | Method and path | What it does |
 | --- | --- |
+| `POST /api/auth/login` | Log in with email and password; returns a token (the only endpoint that works without one) |
+| `GET /api/auth/me` | Id of the logged-in user (handy to check a token) |
+| `POST /api/auth/change-password` | Change your own password; returns a new token and every other session stops working |
 | `POST /api/clients` | Create a client (returns possible duplicates by name) |
 | `GET /api/clients?search=&includeInactive=` | List / search clients |
 | `GET /api/clients/{id}` · `PUT /api/clients/{id}` | Read / edit a client |
 | `POST /api/clients/{id}/deactivate` · `/activate` | Hide / restore a client (no hard delete) |
 | `POST /api/loans` | Create a loan (interest and quincenas are calculated) |
-| `GET /api/loans?clientId=&status=&onlyOverdue=` | List loans; `onlyOverdue=true` shows who is late |
+| `GET /api/loans?clientId=&status=&onlyOverdue=&month=` | List loans; `onlyOverdue=true` shows who is late; `month=2026-11` filters by loan month |
 | `GET /api/loans/{id}` | Loan with its payments |
+| `PUT /api/loans/{id}` | Correct a loan: client, amount and dates only while it has no payments; notes always |
 | `POST /api/loans/{id}/payments` | Register a full or partial payment |
+| `POST /api/loans/{id}/payments/{paymentId}/void` | Void a payment made by mistake (kept in the history, flagged) |
+| `POST /api/loans/{id}/cancel` | Cancel a loan that has no active payments |
+| `POST /api/loans/{id}/archive` · `/unarchive` | Give a loan up for lost (it stops counting as money to collect) / bring it back |
+| `GET /api/payments?clientId=&month=&includeVoided=` | Payment history across loans, newest first |
+| `GET /api/summary?month=` | Totals: lent, principal recovered, interest collected, outstanding and overdue |
+| `GET /api/summary/monthly?months=6` | Month by month (oldest first): lent, principal still out, principal and interest collected; for the charts |
+
+Every endpoint except login needs the header `Authorization: Bearer <token>`. Each user only sees their own clients, loans and payments; another user's data is answered with 404, as if it did not exist. There is no public sign-up: accounts are created from the terminal with `dotnet run --project ControlDeDinero.Api -- create-user <email>`, and a forgotten password is reset the same way with `reset-password <email>`. The token signing key is a secret (`Jwt:Key`, in user-secrets), never part of the repository.
 
 "Today" for overdue checks is the Costa Rica date, regardless of the server's time zone.
 
@@ -118,6 +130,14 @@ dotnet build
 dotnet test
 ```
 
+Frontend (requires Node.js; the backend must be running with `dotnet run --project ControlDeDinero.Api`):
+
+```powershell
+cd frontend
+npm install
+npm run dev   # http://localhost:5173
+```
+
 ## Development roadmap
 
 - [x] Identify the user's real workflow and business rules.
@@ -129,9 +149,11 @@ dotnet test
 - [x] Implement the client directory and duplicate-warning search.
 - [x] Implement loan creation (quincena interest) and payment registration through the API.
 - [ ] Implement scheduled installments (only if the lender needs a payment calendar).
-- [ ] Harden payment registration (idempotency keys, traceable corrections).
-- [ ] Add financial dashboard and monthly history filters.
-- [ ] Add authentication, logging, backup procedure, and integration tests.
+- [x] Traceable corrections: void a payment and cancel a loan without deleting history.
+- [ ] Harden payment registration (idempotency keys).
+- [x] Backend for the financial overview and monthly history (`/api/summary`, `month` filters). The dashboard screen itself is part of the frontend.
+- [x] Add accounts and login (Identity + JWT) and keep each user's data separate.
+- [ ] Add logging, backup procedure, and integration tests.
 - [ ] Build and deploy the PWA; validate with the real user.
 
 ## Key engineering decisions
@@ -140,7 +162,7 @@ dotnet test
 - Every loan retains its agreed rate, number of quincenas and amounts; changing the default rate never changes history.
 - Derived loan amounts (interest, total, paid, remaining) can only change through domain methods, so they cannot drift from the recorded payments.
 - Scheduled installments are **not** proof of payment; only recorded payments affect collected money.
-- Payments are not silently edited or deleted; corrections are traceable through `audit_events`.
+- Payments are never edited or deleted: a mistaken payment is **voided** (it stays in the history, flagged, and stops counting) and the balance is recalculated. Everything leaves a trace in `audit_events`.
 - Foreign keys use `DeleteBehavior.Restrict`: financial history is never removed by cascade.
 - Dates are stored in UTC.
 - Statuses are enums stored as readable strings.

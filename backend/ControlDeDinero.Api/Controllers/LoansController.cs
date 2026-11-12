@@ -89,4 +89,46 @@ public class LoansController : ControllerBase
 
         return Ok(loan);
     }
+
+    /// <summary>Archives a loan the lender gives up for lost. It stops counting as money to collect.</summary>
+    [HttpPost("{id:guid}/archive")]
+    public async Task<ActionResult<LoanDetailDto>> Archive(
+        Guid id,
+        [FromBody] ArchiveLoanRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var loan = await _service.ArchiveAsync(id, request, cancellationToken);
+        if (loan is null)
+            return NotFound();
+
+        return Ok(loan);
+    }
+
+    /// <summary>Brings an archived loan back to active (or paid, if nothing is left).</summary>
+    [HttpPost("{id:guid}/unarchive")]
+    public async Task<ActionResult<LoanDetailDto>> Unarchive(Guid id, CancellationToken cancellationToken)
+    {
+        var loan = await _service.UnarchiveAsync(id, cancellationToken);
+        if (loan is null)
+            return NotFound();
+
+        return Ok(loan);
+    }
+
+    /// <summary>
+    /// Corrects a loan. Client, principal and dates only while it has no payments (otherwise 400);
+    /// notes always.
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<LoanDetailDto>> Update(
+        Guid id,
+        UpdateLoanRequest request,
+        CancellationToken cancellationToken)
+    {
+        var loan = await _service.UpdateAsync(id, request, cancellationToken);
+        if (loan is null)
+            return NotFound();
+
+        return Ok(loan);
+    }
 }

@@ -273,4 +273,101 @@ public class LoanTests
         Assert.Throws<InvalidOperationException>(() => loan.Cancel());
         Assert.Throws<InvalidOperationException>(() => loan.RegisterPayment(1_000m, Today.AddDays(1)));
     }
+
+    [Fact]
+    public void Archive_TakesTheLoanOutOfTheActiveOnes_AndBlocksPayments()
+    {
+        var loan = NewLoan();
+
+        loan.Archive("no va a pagar");
+
+        Assert.Equal(LoanStatus.Archived, loan.Status);
+        Assert.False(loan.IsOverdue(Today.AddDays(60)));
+        Assert.Contains(loan.AuditEvents, e => e.EventType == "LoanArchived");
+        Assert.Throws<InvalidOperationException>(() => loan.RegisterPayment(1_000m, Today.AddDays(1)));
+    }
+
+    [Fact]
+    public void Archive_RejectsALoanThatIsNotActive()
+    {
+        var loan = NewLoan(1_000m, 10m); // total 1,100
+        loan.RegisterPayment(1_100m, Today);
+
+        Assert.Throws<InvalidOperationException>(() => loan.Archive());
+    }
+
+    [Fact]
+    public void Unarchive_BringsTheLoanBack_AndRejectsUnarchivingTwice()
+    {
+        var loan = NewLoan();
+        loan.Archive();
+
+        loan.Unarchive();
+
+        Assert.Equal(LoanStatus.Active, loan.Status);
+        Assert.Contains(loan.AuditEvents, e => e.EventType == "LoanUnarchived");
+        Assert.Throws<InvalidOperationException>(() => loan.Unarchive());
+    }
+
+    [Fact]
+    public void VoidPayment_OnAnArchivedLoan_KeepsItArchived()
+    {
+        var loan = NewLoan(1_000m, 10m); // total 1,100
+        var payment = loan.RegisterPayment(500m, Today.AddDays(1));
+        loan.Archive();
+
+        loan.VoidPayment(payment.Id, DateTime.UtcNow);
+
+        Assert.Equal(LoanStatus.Archived, loan.Status);
+        Assert.Equal(1_100m, loan.RemainingBalance);
+    }
+
+    [Fact]
+    public void UpdateTerms_RecalculatesInterestAndTotal_AndLeavesAnAuditTrail()
+    {
+        var loan = NewLoan(50_000m); // 1 quincena, total 60,000
+        var newClient = Guid.NewGuid();
+
+        loan.UpdateTerms(newClient, 100_000m, Today, Today.AddDays(29));
+
+        Assert.Equal(newClient, loan.ClientId);
+        Assert.Equal(2, loan.Quincenas);
+        Assert.Equal(40_000m, loan.InterestAmount);
+        Assert.Equal(140_000m, loan.TotalAmount);
+        Assert.Equal(140_000m, loan.RemainingBalance);
+        Assert.Contains(loan.AuditEvents, e => e.EventType == "LoanEdited" && e.Description.Contains("60000.00"));
+    }
+
+    [Fact]
+    public void UpdateTerms_RejectsALoanWithPayments_ButAllowsItOnceTheyAreVoided()
+    {
+        var loan = NewLoan(50_000m);
+        var payment = loan.RegisterPayment(10_000m, Today);
+
+        Assert.Throws<InvalidOperationException>(() => loan.UpdateTerms(loan.ClientId, 40_000m, Today, Today.AddDays(14)));
+
+        loan.VoidPayment(payment.Id, DateTime.UtcNow);
+        loan.UpdateTerms(loan.ClientId, 40_000m, Today, Today.AddDays(14));
+
+        Assert.Equal(48_000m, loan.TotalAmount);
+        Assert.Equal(0m, loan.TotalPaid);
+    }
+
+    [Fact]
+    public void UpdateTerms_ValidatesLikeCreate()
+    {
+        var loan = NewLoan();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => loan.UpdateTerms(loan.ClientId, 0m, Today, Today.AddDays(14)));
+        Assert.Throws<ArgumentException>(() => loan.UpdateTerms(loan.ClientId, 1_000m, Today, Today.AddDays(-1)));
+    }
+
+    [Fact]
+    public void UpdateTerms_RejectsALoanThatIsNotActive()
+    {
+        var loan = NewLoan();
+        loan.Cancel();
+
+        Assert.Throws<InvalidOperationException>(() => loan.UpdateTerms(loan.ClientId, 1_000m, Today, Today.AddDays(14)));
+    }
 }

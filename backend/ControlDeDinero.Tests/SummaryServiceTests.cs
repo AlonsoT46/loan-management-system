@@ -62,6 +62,8 @@ public class SummaryServiceTests
 
         Assert.Null(summary.Month);
         Assert.Equal(150_000m, summary.TotalLent);
+        Assert.Equal(30_000m, summary.ExpectedInterest);  // 10,000 (A) + 20,000 (B)
+        Assert.Equal(180_000m, summary.ExpectedTotal);
         Assert.Equal(30_000m, summary.PrincipalRecovered);
         Assert.Equal(6_000m, summary.InterestCollected);
         Assert.Equal(36_000m, summary.TotalCollected);
@@ -69,6 +71,9 @@ public class SummaryServiceTests
         Assert.Equal(2, summary.ActiveLoans);
         Assert.Equal(1, summary.OverdueLoans);
         Assert.Equal(48_000m, summary.OverdueBalance);
+        Assert.Equal(96_000m, summary.DueThisMonth); // B is due Nov 14; A is overdue, so it is not here
+        Assert.Equal(1, summary.DueThisMonthLoans);
+        Assert.Equal(0, summary.ArchivedLoans);
     }
 
     [Fact]
@@ -80,6 +85,8 @@ public class SummaryServiceTests
 
         Assert.Equal("2026-11", summary.Month);
         Assert.Equal(100_000m, summary.TotalLent);
+        Assert.Equal(20_000m, summary.ExpectedInterest);
+        Assert.Equal(120_000m, summary.ExpectedTotal);
         Assert.Equal(20_000m, summary.PrincipalRecovered);
         Assert.Equal(4_000m, summary.InterestCollected);
         Assert.Equal(24_000m, summary.TotalCollected);
@@ -95,6 +102,8 @@ public class SummaryServiceTests
         var summary = await NewSummaryService().GetAsync("2026-10");
 
         Assert.Equal(50_000m, summary.TotalLent);
+        Assert.Equal(10_000m, summary.ExpectedInterest);
+        Assert.Equal(60_000m, summary.ExpectedTotal);
         Assert.Equal(10_000m, summary.PrincipalRecovered);
         Assert.Equal(2_000m, summary.InterestCollected);
         Assert.Equal(12_000m, summary.TotalCollected);
@@ -144,5 +153,70 @@ public class SummaryServiceTests
     public async Task RejectsABadMonth()
     {
         await Assert.ThrowsAsync<ValidationException>(() => NewSummaryService().GetAsync("2026-13"));
+    }
+
+    [Fact]
+    public async Task Monthly_SplitsLentStillOutAndCollectedByMonth()
+    {
+        await SeedAsync();
+
+        var points = await NewSummaryService().GetMonthlyAsync(2);
+
+        Assert.Collection(points,
+            october =>
+            {
+                Assert.Equal("2026-10", october.Month);
+                Assert.Equal(50_000m, october.Lent);
+                Assert.Equal(40_000m, october.PrincipalStillOut); // 50,000 - 10,000 recovered
+                Assert.Equal(10_000m, october.PrincipalCollected);
+                Assert.Equal(2_000m, october.InterestCollected);
+            },
+            november =>
+            {
+                Assert.Equal("2026-11", november.Month);
+                Assert.Equal(100_000m, november.Lent);
+                Assert.Equal(80_000m, november.PrincipalStillOut); // 100,000 - 20,000 recovered
+                Assert.Equal(20_000m, november.PrincipalCollected);
+                Assert.Equal(4_000m, november.InterestCollected);
+            });
+    }
+
+    [Fact]
+    public async Task Monthly_IgnoresVoidedPayments()
+    {
+        var (a, _, paymentId) = await SeedAsync();
+        await NewLoanService().VoidPaymentAsync(a.Loan.Id, paymentId, null);
+
+        var october = (await NewSummaryService().GetMonthlyAsync(2))[0];
+
+        Assert.Equal(50_000m, october.PrincipalStillOut);
+        Assert.Equal(0m, october.PrincipalCollected);
+        Assert.Equal(0m, october.InterestCollected);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(25)]
+    public async Task Monthly_RejectsAnInvalidNumberOfMonths(int months)
+    {
+        await Assert.ThrowsAsync<ValidationException>(() => NewSummaryService().GetMonthlyAsync(months));
+    }
+
+    [Fact]
+    public async Task ArchivedLoan_StopsCountingAsMoneyToCollect()
+    {
+        var (a, _, _) = await SeedAsync();
+        await NewLoanService().ArchiveAsync(a.Loan.Id, null);
+
+        var summary = await NewSummaryService().GetAsync(null);
+        Assert.Equal(150_000m, summary.TotalLent); // it was lent all the same
+        Assert.Equal(96_000m, summary.OutstandingBalance); // only B
+        Assert.Equal(0, summary.OverdueLoans);
+        Assert.Equal(1, summary.ArchivedLoans);
+        Assert.Equal(48_000m, summary.ArchivedBalance);
+
+        var october = (await NewSummaryService().GetMonthlyAsync(2))[0];
+        Assert.Equal(0m, october.PrincipalStillOut);
+        Assert.Equal(40_000m, october.PrincipalWrittenOff); // 50,000 lent - 10,000 recovered
     }
 }
