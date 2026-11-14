@@ -16,19 +16,29 @@ export interface ChartPoint {
 }
 
 /**
- * Columns stacked from the bottom (first series at the bottom). Tapping or hovering a column shows
- * its numbers in the readout above, which works on a phone where there is no mouse.
+ * Columns stacked from the bottom (first series at the bottom).
+ * - On its own, tapping or hovering a column shows its numbers in a readout above it.
+ * - With selectedIndex + onSelect, the screen decides which column is selected (for example, the
+ *   month chosen at the top); then there is no readout, because the screen shows the numbers.
  */
 export function StackedBarChart(props: {
   title: string
+  showTitle?: boolean
   series: ChartSeries[]
   points: ChartPoint[]
   formatValue: (value: number) => string
   emptyText: string
   note?: string
+  selectedIndex?: number
+  onSelect?: (index: number) => void
 }) {
   const { series, points, formatValue } = props
-  const [selected, setSelected] = useState(points.length - 1)
+  const [ownSelected, setOwnSelected] = useState(points.length - 1)
+  const [showNote, setShowNote] = useState(false)
+
+  const controlled = props.onSelect !== undefined
+  const selected = props.selectedIndex ?? ownSelected
+  const select = (index: number) => (props.onSelect ? props.onSelect(index) : setOwnSelected(index))
 
   const totals = points.map((point) => series.reduce((sum, s) => sum + Math.max(0, point.values[s.key] ?? 0), 0))
   const max = Math.max(0, ...totals)
@@ -36,23 +46,37 @@ export function StackedBarChart(props: {
 
   return (
     <section className="rounded-2xl border border-ink px-4 pt-3 pb-4">
-      <h2 className="text-lg font-medium">{props.title}</h2>
+      {props.showTitle !== false && <h2 className="text-lg font-medium">{props.title}</h2>}
 
       {/* Legend: color is never the only clue, every series has its name. */}
-      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
-        {series.map((s) => (
-          <span key={s.key} className="inline-flex items-center gap-1.5">
-            <span className={'size-2.5 rounded-sm ' + s.colorClass} />
-            {s.label}
-          </span>
-        ))}
+      <div className="mt-1 flex items-start justify-between gap-2">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+          {series.map((s) => (
+            <span key={s.key} className="inline-flex items-center gap-1.5">
+              <span className={'size-2.5 rounded-sm ' + s.colorClass} />
+              {s.label}
+            </span>
+          ))}
+        </div>
+        {props.note && (
+          <button
+            type="button"
+            aria-label="Qué muestra esta gráfica"
+            aria-expanded={showNote}
+            onClick={() => setShowNote((value) => !value)}
+            className="flex size-6 shrink-0 items-center justify-center rounded-full border border-muted text-xs text-muted"
+          >
+            i
+          </button>
+        )}
       </div>
+      {props.note && showNote && <p className="mt-2 rounded-xl bg-line/50 px-3 py-2 text-xs text-muted">{props.note}</p>}
 
       {max === 0 ? (
         <p className="py-8 text-center text-muted">{props.emptyText}</p>
       ) : (
         <>
-          {current && (
+          {current && !controlled && (
             <div className="mt-3 rounded-xl bg-line/50 px-3 py-2 text-sm" aria-live="polite">
               <p className="flex justify-between font-medium">
                 <span>{current.fullLabel}</span>
@@ -80,8 +104,8 @@ export function StackedBarChart(props: {
                   key={point.label + index}
                   type="button"
                   tabIndex={-1}
-                  onClick={() => setSelected(index)}
-                  onMouseEnter={() => setSelected(index)}
+                  onClick={() => select(index)}
+                  onMouseEnter={controlled ? undefined : () => select(index)}
                   className="flex h-full flex-1 flex-col items-center justify-end"
                 >
                   <div
@@ -114,7 +138,6 @@ export function StackedBarChart(props: {
         </>
       )}
 
-      {props.note && <p className="mt-3 text-xs text-muted">{props.note}</p>}
 
       {/* The same numbers as a table, for screen readers. The wrapper hides it entirely: with "sr-only"
           on the table itself, the browser still draws the caption outside the table. */}

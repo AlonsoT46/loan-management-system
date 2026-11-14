@@ -6,7 +6,7 @@ import { ArrowDownLeftIcon, ArrowUpRightIcon } from '../components/Icons'
 import { Avatar, ListCard, ListRow, LoadError, Message } from '../components/Ui'
 import { outlineButtonClass } from '../components/styles'
 import { useLoad } from '../hooks/useLoad'
-import { currentMonth, daysSince, formatDate, formatMoney } from '../utils/format'
+import { currentMonth, daysSince, formatDate, formatMoney, formatMonth } from '../utils/format'
 
 export function HomePage() {
   const { email } = useAuth()
@@ -46,16 +46,36 @@ function HomeContent({ summary, active }: { summary: Summary; active: LoanSummar
     <>
       <section>
         <p className="text-muted">Por cobrar</p>
-        <div className="mt-1 flex items-end justify-between gap-3">
-          <p className="text-4xl font-light tracking-tight">{formatMoney(summary.outstandingBalance)}</p>
-          <div className="shrink-0 text-right text-sm">
-            <p className="text-gain">+{formatMoney(summary.totalCollected)}</p>
-            <p className="text-muted">cobrado este mes</p>
-          </div>
-        </div>
+        <p className="mt-1 text-4xl font-light tracking-tight">{formatMoney(summary.outstandingBalance)}</p>
         <p className="mt-1 text-sm text-muted">
           {summary.activeLoans === 1 ? '1 préstamo activo' : `${summary.activeLoans} préstamos activos`}
         </p>
+      </section>
+
+      {/* This month: what falls due before the month ends (late ones apart) and what already came in. */}
+      <section className="rounded-2xl border border-ink p-4">
+        <p className="text-sm font-medium">Este mes · {formatMonth(currentMonth())}</p>
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs text-muted">Cobrar este mes</p>
+            <p className="text-2xl font-light tracking-tight">{formatMoney(summary.dueThisMonth)}</p>
+            <p className="text-xs text-muted">
+              {summary.dueThisMonthLoans === 0
+                ? 'No vence ningún préstamo'
+                : summary.dueThisMonthLoans === 1
+                  ? '1 préstamo vence este mes'
+                  : `${summary.dueThisMonthLoans} préstamos vencen este mes`}
+            </p>
+          </div>
+          <div className="border-l border-line pl-3">
+            <p className="text-xs text-muted">Ya cobrado</p>
+            <p className="text-2xl font-light tracking-tight text-gain">+{formatMoney(summary.totalCollected)}</p>
+            <p className="text-xs text-muted">en pagos recibidos</p>
+          </div>
+        </div>
+        {summary.overdueBalance > 0 && (
+          <p className="mt-3 text-sm text-loss">Además tienes {formatMoney(summary.overdueBalance)} vencido por cobrar.</p>
+        )}
       </section>
 
       <section className="grid grid-cols-2 gap-3">
